@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Project Command Centre</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚙️</text></svg>">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'DM Sans', 'Segoe UI', sans-serif; }
+  #root { min-height: 100vh; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+
+<script type="text/babel">
+const { useState, useEffect, useCallback, useMemo } = React;
+
+
+
+const STORAGE_KEY = "pcc-v5";
+function uid() { return "id_" + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
+
+const AREAS = [
+  { id: "raw-materials", name: "Raw Materials", color: "#F97066", bg: "#FEF3F2", icon: "🧪", keywords: ["resin","supplier","raw","material","chemical","pigment"] },
+  { id: "packaging", name: "Packaging", color: "#53B1FD", bg: "#EFF8FF", icon: "📦", keywords: ["box","label","carton","pallet","corrugated","pack","shrink"] },
+  { id: "scheduling", name: "Scheduling", color: "#FDB022", bg: "#FFFAEB", icon: "📅", keywords: ["schedule","batch","plan","MRP","production","CO05N","MD04","forecast","IBP","STO","Q3"] },
+  { id: "master-data", name: "Master Data", color: "#9B8AFB", bg: "#F4F3FF", icon: "🗄️", keywords: ["BOM","material master","CS03","MM03","SE16N","data","SAP"] },
+  { id: "general", name: "General", color: "#47CD89", bg: "#ECFDF3", icon: "⚡", keywords: ["report","meeting","slides","email","update","review","chase"] },
+  { id: "people", name: "People", color: "#F670C7", bg: "#FDF2FA", icon: "👥", keywords: ["ben","onboard","training","team","skills","feedback","hire","performance"] },
+];
+
+const STATUSES = ["Not Started", "In Progress", "On Hold", "Complete"];
+const SC = { "Not Started": "#94A3B8", "In Progress": "#53B1FD", "On Hold": "#FDB022", "Complete": "#47CD89" };
+const SBG = { "Not Started": "#F1F5F9", "In Progress": "#EFF8FF", "On Hold": "#FFFAEB", "Complete": "#ECFDF3" };
+const PRIORITIES = ["Critical","High","Medium","Low"];
+const PC = { Critical: "#F97066", High: "#FB923C", Medium: "#FDB022", Low: "#94A3B8" };
+const EFFORTS = ["S","M","L","XL"];
+const EC = { S: "#47CD89", M: "#53B1FD", L: "#FDB022", XL: "#F97066" };
+
+const DEFAULT_PROJECTS = [
+  { id:"p1",name:"RM Supplier Consolidation",area:"raw-materials",status:"In Progress",priority:"High",effort:"XL",due:"2026-05-15",notes:"Consolidating to reduce costs",created:"2026-03-01" },
+  { id:"p2",name:"New Corrugated Box Spec",area:"packaging",status:"Not Started",priority:"Medium",effort:"L",due:"2026-06-01",notes:"",created:"2026-03-10" },
+  { id:"p3",name:"Q3 Production Plan Build",area:"scheduling",status:"In Progress",priority:"Critical",effort:"XL",due:"2026-04-10",notes:"QLD, NSW, VIC plants",created:"2026-02-15" },
+  { id:"p4",name:"BOM Clean-up Phase 2",area:"master-data",status:"In Progress",priority:"High",effort:"L",due:"2026-04-30",notes:"Focus on inactive materials",created:"2026-03-01" },
+  { id:"p5",name:"SAP Report Automation",area:"general",status:"On Hold",priority:"Medium",effort:"M",due:"2026-05-20",notes:"Blocked by Z-program",created:"2026-02-20" },
+  { id:"p6",name:"Ben Onboarding — Month 2",area:"people",status:"In Progress",priority:"High",effort:"M",due:"2026-04-15",notes:"Progressing well",created:"2026-03-01" },
+  { id:"p7",name:"Resin Shortage Contingency",area:"raw-materials",status:"Complete",priority:"Critical",effort:"M",due:"2026-03-15",notes:"Resolved",created:"2026-02-01" },
+  { id:"p8",name:"Label Redesign — Trade Range",area:"packaging",status:"Not Started",priority:"Low",effort:"S",due:"2026-07-01",notes:"",created:"2026-03-15" },
+  { id:"p9",name:"Team Skills Matrix",area:"people",status:"Not Started",priority:"Medium",effort:"S",due:"2026-05-01",notes:"",created:"2026-03-10" },
+  { id:"p10",name:"MRP Exception Review",area:"scheduling",status:"In Progress",priority:"High",effort:"L",due:"2026-04-20",notes:"Building weekly review",created:"2026-03-05" },
+];
+
+const DEFAULT_TASKS = [
+  { id:"t1",name:"Map supplier list to material groups",projectId:"p1",area:"raw-materials",status:"Complete",priority:"High",effort:"M",due:"2026-03-20",notes:"",created:"2026-03-01" },
+  { id:"t2",name:"Get quotes from 3 alt suppliers",projectId:"p1",area:"raw-materials",status:"In Progress",priority:"High",effort:"L",due:"2026-04-05",notes:"",created:"2026-03-05" },
+  { id:"t3",name:"Review cost-benefit with procurement",projectId:"p1",area:"raw-materials",status:"Not Started",priority:"Medium",effort:"S",due:"2026-04-15",notes:"",created:"2026-03-05" },
+  { id:"t4",name:"Finalise Q3 demand from IBP",projectId:"p3",area:"scheduling",status:"Complete",priority:"Critical",effort:"M",due:"2026-03-25",notes:"",created:"2026-02-15" },
+  { id:"t5",name:"Build batch schedule QLD",projectId:"p3",area:"scheduling",status:"Complete",priority:"Critical",effort:"L",due:"2026-03-28",notes:"",created:"2026-02-20" },
+  { id:"t6",name:"Validate material availability",projectId:"p3",area:"scheduling",status:"In Progress",priority:"High",effort:"M",due:"2026-04-02",notes:"",created:"2026-03-01" },
+  { id:"t7",name:"Build batch schedule NSW",projectId:"p3",area:"scheduling",status:"In Progress",priority:"Critical",effort:"L",due:"2026-04-05",notes:"",created:"2026-03-01" },
+  { id:"t8",name:"Review active BOMs for duplicates",projectId:"p4",area:"master-data",status:"In Progress",priority:"High",effort:"XL",due:"2026-04-10",notes:"",created:"2026-03-05" },
+  { id:"t9",name:"Set up Ben SAP access",projectId:"p6",area:"people",status:"Complete",priority:"High",effort:"S",due:"2026-03-10",notes:"",created:"2026-03-01" },
+  { id:"t10",name:"Shadow scheduling run with Ben",projectId:"p6",area:"people",status:"In Progress",priority:"High",effort:"M",due:"2026-04-01",notes:"",created:"2026-03-05" },
+  { id:"t11",name:"Fix goods receipt Z-program",projectId:"p5",area:"general",status:"On Hold",priority:"Medium",effort:"M",due:"2026-05-01",notes:"",created:"2026-02-20" },
+  { id:"t12",name:"Pull MD04 exception list",projectId:"p10",area:"scheduling",status:"Complete",priority:"High",effort:"M",due:"2026-03-25",notes:"",created:"2026-03-05" },
+  { id:"t13",name:"Categorise exceptions by impact",projectId:"p10",area:"scheduling",status:"In Progress",priority:"High",effort:"L",due:"2026-04-05",notes:"",created:"2026-03-10" },
+  { id:"t14",name:"Update dashboard layout sheet",projectId:null,area:"general",status:"Not Started",priority:"Medium",effort:"S",due:"2026-04-10",notes:"",created:"2026-03-15" },
+  { id:"t15",name:"Chase TAS pallet discrepancy",projectId:null,area:"general",status:"In Progress",priority:"Medium",effort:"S",due:"2026-03-28",notes:"",created:"2026-03-18" },
+  { id:"t16",name:"Mid-year review direct reports",projectId:null,area:"people",status:"Not Started",priority:"High",effort:"L",due:"2026-05-15",notes:"",created:"2026-03-15" },
+];
+
+// ============================================================
+// AI
+// ============================================================
+async function aiProcess(raw, projs) {
+  const apiKey = localStorage.getItem("pcc-api-key");
+  if (!apiKey) { alert("Set your Anthropic API key in Settings (gear icon in sidebar)"); return null; }
+  const projCtx = projs.filter(p=>p.status!=="Complete").map(p=>`"${p.name}" (id:${p.id}, area:${AREAS.find(a=>a.id===p.area)?.name})`).join(", ");
+  const areaCtx = AREAS.map(a=>`${a.name}(id:${a.id}): ${a.keywords.join(",")}`).join("; ");
+  try {
+    const r = await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,messages:[{role:"user",content:`Extract tasks from these meeting notes for a production planner at Dulux Group Rocklea. Areas: ${areaCtx}. Active projects: ${projCtx}. Today is ${new Date().toISOString().slice(0,10)}. Return ONLY JSON array: [{"name":"clean name","area":"area-id","priority":"Critical|High|Medium|Low","effort":"S|M|L|XL","projectId":"id or null","due":"YYYY-MM-DD or null","type":"task|note","original":"raw text"}]. Notes:\n${raw}`}]})});
+    const d = await r.json();
+    return JSON.parse((d.content?.[0]?.text||"[]").replace(/```json|```/g,"").trim());
+  } catch(e) { console.error(e); return null; }
+}
+
+// ============================================================
+// DONUT CHART
+// ============================================================
+function Donut({ size=120, stroke=14, segments, center, sub }) {
+  const r = (size-stroke)/2, c = 2*Math.PI*r;
+  let offset = 0;
+  return (
+    <div style={{ position:"relative", width:size, height:size }}>
+      <svg width={size} height={size} style={{ transform:"rotate(-90deg)" }}>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#F1F5F9" strokeWidth={stroke} />
+        {segments.map((seg,i) => {
+          const dash = (seg.pct/100)*c;
+          const o = offset; offset += dash;
+          return <circle key={i} cx={size/2} cy={size/2} r={r} fill="none" stroke={seg.color} strokeWidth={stroke} strokeDasharray={`${dash} ${c-dash}`} strokeDashoffset={-o} strokeLinecap="round" style={{ transition:"all 0.6s ease" }} />;
+        })}
+      </svg>
+      <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
+        <div style={{ fontSize: size*0.22, fontWeight:800, color:"#1E293B" }}>{center}</div>
+        {sub && <div style={{ fontSize: size*0.1, color:"#94A3B8", fontWeight:600 }}>{sub}</div>}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// COMPONENTS
+// ============================================================
+const Badge = ({children,color,bg,s={}}) => <span style={{display:"inline-flex",alignItems:"center",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:600,color,background:bg,whiteSpace:"nowrap",gap:4,...s}}>{children}</span>;
+const PBar = ({value,color,h=8}) => <div style={{width:"100%",height:h,borderRadius:h,background:"#F1F5F9",overflow:"hidden"}}><div style={{width:`${Math.min(100,Math.max(0,value))}%`,height:"100%",borderRadius:h,background:color,transition:"width 0.5s ease"}}/></div>;
+
+function Btn({children,onClick,color="#6366F1",outline,small,style={}}) {
+  return <button onClick={onClick} style={{padding:small?"6px 14px":"10px 20px",borderRadius:20,border:outline?`1.5px solid ${color}`:"none",background:outline?"transparent":color,color:outline?color:"#fff",fontSize:small?12:13,fontWeight:600,cursor:"pointer",transition:"all 0.15s",letterSpacing:0.1,...style}}>{children}</button>;
+}
+
+function NavItem({icon,label,active,onClick,badge}) {
+  return <button onClick={onClick} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderRadius:12,border:"none",background:active?"#6366F1":"transparent",color:active?"#fff":"#64748B",fontSize:13,fontWeight:active?700:500,cursor:"pointer",width:"100%",textAlign:"left",transition:"all 0.15s",position:"relative"}}>
+    <span style={{fontSize:16}}>{icon}</span>{label}
+    {badge>0&&<span style={{marginLeft:"auto",background:active?"rgba(255,255,255,0.25)":"#EEF2FF",color:active?"#fff":"#6366F1",fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:10}}>{badge}</span>}
+  </button>;
+}
+
+// ============================================================
+// DETAIL PANEL
+// ============================================================
+function DetailPanel({type,item,onClose,onSave,onDelete,tasks,projects,onSaveTask,onDeleteTask,onAddTask,onOpenTask}) {
+  const [f,setF]=useState({...item});
+  const [adding,setAdding]=useState(false);
+  const [nn,setNn]=useState("");
+  const upd=(k,v)=>{const nf={...f,[k]:v};setF(nf);onSave(nf)};
+  useEffect(()=>{setF({...item})},[item]);
+  const area=AREAS.find(a=>a.id===f.area)||AREAS[4];
+  const linked=type==="project"?(tasks||[]).filter(t=>t.projectId===f.id):[];
+  const done=linked.filter(t=>t.status==="Complete").length;
+  const prog=linked.length?Math.round((done/linked.length)*100):0;
+  const parent=type==="task"&&f.projectId?(projects||[]).find(p=>p.id===f.projectId):null;
+
+  return (
+    <div style={{position:"fixed",right:0,top:0,bottom:0,width:420,maxWidth:"95vw",background:"#fff",boxShadow:"-8px 0 40px rgba(0,0,0,0.08)",zIndex:1000,display:"flex",flexDirection:"column",borderLeft:"1px solid #E2E8F0"}}>
+      <div style={{padding:"20px 24px 16px",background:area.bg,borderBottom:`2px solid ${area.color}20`}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+          <Badge color={area.color} bg={`${area.color}20`}>{area.icon} {area.name}</Badge>
+          <button onClick={onClose} style={{background:"#F1F5F9",border:"none",width:28,height:28,borderRadius:8,cursor:"pointer",fontSize:14,color:"#94A3B8",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+        </div>
+        <input value={f.name} onChange={e=>upd("name",e.target.value)} style={{width:"100%",fontSize:18,fontWeight:700,border:"none",background:"transparent",color:"#1E293B",outline:"none",padding:0,boxSizing:"border-box",fontFamily:"inherit"}}/>
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"18px 24px"}}>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:16}}>
+          {STATUSES.map(s=><button key={s} onClick={()=>upd("status",s)} style={{padding:"5px 14px",borderRadius:20,border:f.status===s?`2px solid ${SC[s]}`:"1.5px solid #E2E8F0",background:f.status===s?SBG[s]:"#fff",color:f.status===s?SC[s]:"#94A3B8",fontSize:12,fontWeight:600,cursor:"pointer"}}>{s}</button>)}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
+          <div><div style={{fontSize:11,fontWeight:600,color:"#94A3B8",marginBottom:4}}>Priority</div><div style={{display:"flex",gap:4}}>{PRIORITIES.map(p=><button key={p} onClick={()=>upd("priority",p)} style={{width:28,height:28,borderRadius:8,border:f.priority===p?`2px solid ${PC[p]}`:"1.5px solid #E2E8F0",background:f.priority===p?`${PC[p]}15`:"#fff",cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}} title={p}><span style={{width:10,height:10,borderRadius:5,background:PC[p]}}/></button>)}</div></div>
+          <div><div style={{fontSize:11,fontWeight:600,color:"#94A3B8",marginBottom:4}}>Effort</div><div style={{display:"flex",gap:4}}>{EFFORTS.map(e=><button key={e} onClick={()=>upd("effort",e)} style={{padding:"4px 10px",borderRadius:8,border:f.effort===e?`2px solid ${EC[e]}`:"1.5px solid #E2E8F0",background:f.effort===e?`${EC[e]}15`:"#fff",color:f.effort===e?EC[e]:"#94A3B8",fontSize:11,fontWeight:700,cursor:"pointer"}}>{e}</button>)}</div></div>
+          <div><div style={{fontSize:11,fontWeight:600,color:"#94A3B8",marginBottom:4}}>Area</div><select value={f.area} onChange={e=>upd("area",e.target.value)} style={{width:"100%",padding:"8px 10px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12,background:"#fff",color:"#1E293B"}}>{AREAS.map(a=><option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}</select></div>
+          <div><div style={{fontSize:11,fontWeight:600,color:"#94A3B8",marginBottom:4}}>Due Date</div><input type="date" value={f.due||""} onChange={e=>upd("due",e.target.value)} style={{width:"100%",padding:"8px 10px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12,background:"#fff",color:"#1E293B",boxSizing:"border-box"}}/></div>
+          {type==="task"&&<div style={{gridColumn:"1/3"}}><div style={{fontSize:11,fontWeight:600,color:"#94A3B8",marginBottom:4}}>Project</div><select value={f.projectId||""} onChange={e=>upd("projectId",e.target.value||null)} style={{width:"100%",padding:"8px 10px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12,background:"#fff",color:"#1E293B"}}><option value="">— No project —</option>{(projects||[]).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>}
+        </div>
+        {type==="task"&&parent&&<div style={{background:"#F8FAFC",borderRadius:12,padding:"12px 14px",marginBottom:16,border:"1px solid #E2E8F0"}}><div style={{fontSize:10,fontWeight:700,color:"#94A3B8",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Parent Project</div><div style={{fontSize:14,fontWeight:700,color:"#1E293B"}}>{parent.name}</div><div style={{display:"flex",gap:6,marginTop:6}}><Badge color={SC[parent.status]} bg={SBG[parent.status]}>{parent.status}</Badge><span style={{fontSize:11,color:"#94A3B8"}}>Due {parent.due?new Date(parent.due).toLocaleDateString("en-AU",{day:"numeric",month:"short"}):"—"}</span></div></div>}
+        {type==="project"&&linked.length>0&&<div style={{marginBottom:16,display:"flex",alignItems:"center",gap:16}}><Donut size={70} stroke={8} center={`${prog}%`} segments={[{pct:prog,color:area.color}]}/><div><div style={{fontSize:22,fontWeight:800,color:"#1E293B"}}>{done}<span style={{fontSize:14,fontWeight:500,color:"#94A3B8"}}>/{linked.length}</span></div><div style={{fontSize:12,color:"#94A3B8"}}>tasks complete</div></div></div>}
+        <div style={{marginBottom:16}}><div style={{fontSize:11,fontWeight:600,color:"#94A3B8",marginBottom:4}}>Notes</div><textarea value={f.notes||""} onChange={e=>upd("notes",e.target.value)} placeholder="Add notes..." rows={3} style={{width:"100%",padding:"10px 12px",borderRadius:12,border:"1.5px solid #E2E8F0",fontSize:13,resize:"vertical",fontFamily:"inherit",boxSizing:"border-box",lineHeight:1.5,color:"#374151",background:"#F8FAFC"}}/></div>
+        {type==="project"&&<div><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><span style={{fontSize:12,fontWeight:700,color:"#1E293B"}}>Tasks ({linked.length})</span><button onClick={()=>setAdding(true)} style={{background:"#EEF2FF",border:"none",padding:"4px 12px",borderRadius:16,fontSize:11,fontWeight:600,color:"#6366F1",cursor:"pointer"}}>+ Add task</button></div>
+        {adding&&<div style={{display:"flex",gap:6,marginBottom:8}}><input value={nn} onChange={e=>setNn(e.target.value)} placeholder="Task name..." autoFocus onKeyDown={e=>{if(e.key==="Enter"&&nn.trim()){onAddTask({name:nn.trim(),projectId:f.id,area:f.area,status:"Not Started",priority:"Medium",effort:"M",due:"",notes:"",created:new Date().toISOString().slice(0,10)});setNn("");setAdding(false)}}} style={{flex:1,padding:"8px 12px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12}}/><Btn small onClick={()=>{if(nn.trim()){onAddTask({name:nn.trim(),projectId:f.id,area:f.area,status:"Not Started",priority:"Medium",effort:"M",due:"",notes:"",created:new Date().toISOString().slice(0,10)});setNn("");setAdding(false)}}}>Add</Btn></div>}
+        {linked.sort((a,b)=>a.status==="Complete"&&b.status!=="Complete"?1:a.status!=="Complete"&&b.status==="Complete"?-1:0).map(t=><div key={t.id} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",borderRadius:10,background:"#F8FAFC",border:"1px solid #E2E8F0",marginBottom:4}}>
+          <button onClick={()=>{const i=STATUSES.indexOf(t.status);onSaveTask({...t,status:STATUSES[(i+1)%STATUSES.length]})}} style={{width:22,height:22,borderRadius:22,border:`2px solid ${SC[t.status]}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,cursor:"pointer",background:t.status==="Complete"?SC[t.status]:"transparent",color:t.status==="Complete"?"#fff":"transparent",transition:"all 0.15s"}}>{t.status==="Complete"?"✓":""}</button>
+          <div style={{flex:1,cursor:"pointer"}} onClick={()=>onOpenTask(t)}><div style={{fontSize:12,fontWeight:600,textDecoration:t.status==="Complete"?"line-through":"none",color:t.status==="Complete"?"#94A3B8":"#1E293B"}}>{t.name}</div></div>
+          <span style={{width:8,height:8,borderRadius:4,background:PC[t.priority],flexShrink:0}} title={t.priority}/>
+          <span style={{fontSize:10,fontWeight:700,color:EC[t.effort]}}>{t.effort}</span>
+          <button onClick={()=>onDeleteTask(t.id)} style={{background:"none",border:"none",fontSize:14,cursor:"pointer",color:"#D1D5DB"}}>×</button>
+        </div>)}</div>}
+      </div>
+      <div style={{padding:"14px 24px",borderTop:"1px solid #E2E8F0",display:"flex",justifyContent:"space-between"}}><Btn small outline color="#F97066" onClick={()=>{onDelete(f.id);onClose()}}>Delete</Btn><Btn small onClick={onClose}>Done</Btn></div>
+    </div>
+  );
+}
+
+// ============================================================
+// AI INBOX
+// ============================================================
+function AIInbox({projects,onAccept}) {
+  const [raw,setRaw]=useState("");
+  const [parsed,setParsed]=useState([]);
+  const [loading,setLoading]=useState(false);
+  const [accepted,setAccepted]=useState(new Set());
+
+  const run=async()=>{
+    if(!raw.trim())return;setLoading(true);setParsed([]);setAccepted(new Set());
+    const r=await aiProcess(raw,projects);
+    if(r)setParsed(r.map((x,i)=>({...x,_id:`ai${i}_${Date.now()}`})));
+    setLoading(false);
+  };
+  const edit=(id,k,v)=>setParsed(p=>p.map(x=>x._id===id?{...x,[k]:v}:x));
+  const accept=(item)=>{onAccept({name:item.name,area:item.area||"general",priority:item.priority||"Medium",effort:item.effort||"M",projectId:item.projectId||null,due:item.due||"",status:"Not Started",notes:item.original?`Captured: "${item.original}"`:"",created:new Date().toISOString().slice(0,10)});setAccepted(p=>new Set([...p,item._id]))};
+  const taskItems=parsed.filter(p=>p.type==="task");
+  const noteItems=parsed.filter(p=>p.type==="note");
+
+  return <div>
+    <div style={{background:"#fff",borderRadius:16,border:"1px solid #E2E8F0",padding:"24px",marginBottom:16,boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
+        <div style={{width:40,height:40,borderRadius:12,background:"linear-gradient(135deg,#6366F1,#8B5CF6)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>🤖</div>
+        <div><div style={{fontSize:16,fontWeight:700,color:"#1E293B"}}>AI Quick Capture</div><div style={{fontSize:12,color:"#94A3B8"}}>Dump meeting notes → AI extracts structured tasks</div></div>
+      </div>
+      <textarea value={raw} onChange={e=>setRaw(e.target.value)} placeholder="Type your raw notes here...\n\ne.g. chase john on pallet issue TAS urgent\nneed to review Q3 numbers by friday\nben should start running MRP independently" rows={5} style={{width:"100%",padding:"14px 16px",borderRadius:12,border:"1.5px solid #E2E8F0",fontSize:13,fontFamily:"inherit",resize:"vertical",boxSizing:"border-box",lineHeight:1.6,color:"#374151",background:"#F8FAFC"}}/>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:12}}>
+        <span style={{fontSize:11,color:"#CBD5E1"}}>{raw.trim().split("\n").filter(l=>l.trim()).length} lines</span>
+        <div style={{display:"flex",gap:8}}>
+          {raw.trim()&&<Btn small outline color="#94A3B8" onClick={()=>{setRaw("");setParsed([]);setAccepted(new Set())}}>Clear</Btn>}
+          <Btn small onClick={run} style={{background:loading?"#94A3B8":"linear-gradient(135deg,#6366F1,#8B5CF6)"}}>{loading?"Processing...":"🤖 Extract Tasks"}</Btn>
+        </div>
+      </div>
+    </div>
+
+    {parsed.length>0&&<div style={{background:"#fff",borderRadius:16,border:"1px solid #E2E8F0",padding:"24px",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <div><div style={{fontSize:15,fontWeight:700}}>Extracted Items</div><div style={{fontSize:11,color:"#94A3B8"}}>{taskItems.length} tasks · {noteItems.length} notes</div></div>
+        {taskItems.filter(t=>!accepted.has(t._id)).length>0&&<Btn small onClick={()=>taskItems.filter(t=>!accepted.has(t._id)).forEach(accept)} style={{background:"#47CD89"}}>Accept All ({taskItems.filter(t=>!accepted.has(t._id)).length})</Btn>}
+      </div>
+      {taskItems.map(item=>{const area=AREAS.find(a=>a.id===item.area)||AREAS[4];const proj=item.projectId?projects.find(p=>p.id===item.projectId):null;const done=accepted.has(item._id);
+        return <div key={item._id} style={{padding:"14px 16px",borderRadius:12,border:`1.5px solid ${done?"#D1FAE5":"#E2E8F0"}`,background:done?"#F0FDF9":"#F8FAFC",marginBottom:8,opacity:done?0.6:1,transition:"all 0.2s"}}>
+          <div style={{fontSize:10,color:"#94A3B8",fontStyle:"italic",marginBottom:6}}>"{item.original}"</div>
+          <input value={item.name} onChange={e=>edit(item._id,"name",e.target.value)} disabled={done} style={{width:"100%",fontSize:14,fontWeight:700,border:"none",background:"transparent",color:"#1E293B",outline:"none",padding:0,marginBottom:8,boxSizing:"border-box",fontFamily:"inherit"}}/>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
+            <Badge color={area.color} bg={area.bg}>{area.icon} {area.name}</Badge>
+            <Badge color={PC[item.priority]} bg={`${PC[item.priority]}15`}><span style={{width:7,height:7,borderRadius:4,background:PC[item.priority]}}/>{item.priority}</Badge>
+            <Badge color={EC[item.effort]} bg={`${EC[item.effort]}15`}>{item.effort}</Badge>
+            {item.due&&<Badge color="#94A3B8" bg="#F1F5F9">📅 {new Date(item.due).toLocaleDateString("en-AU",{day:"numeric",month:"short"})}</Badge>}
+            {proj&&<Badge color="#6366F1" bg="#EEF2FF">🔗 {proj.name}</Badge>}
+          </div>
+          {!done&&<div style={{display:"flex",gap:4,alignItems:"center"}}>
+            <select value={item.area} onChange={e=>edit(item._id,"area",e.target.value)} style={{padding:"4px 8px",borderRadius:8,border:"1px solid #E2E8F0",fontSize:10}}>{AREAS.map(a=><option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}</select>
+            <select value={item.priority} onChange={e=>edit(item._id,"priority",e.target.value)} style={{padding:"4px 8px",borderRadius:8,border:"1px solid #E2E8F0",fontSize:10}}>{PRIORITIES.map(p=><option key={p} value={p}>{p}</option>)}</select>
+            <select value={item.effort} onChange={e=>edit(item._id,"effort",e.target.value)} style={{padding:"4px 8px",borderRadius:8,border:"1px solid #E2E8F0",fontSize:10}}>{EFFORTS.map(e=><option key={e} value={e}>{e}</option>)}</select>
+            <select value={item.projectId||""} onChange={e=>edit(item._id,"projectId",e.target.value||null)} style={{padding:"4px 8px",borderRadius:8,border:"1px solid #E2E8F0",fontSize:10,maxWidth:130}}><option value="">No project</option>{projects.filter(p=>p.status!=="Complete").map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>
+            <div style={{flex:1}}/>
+            <Btn small onClick={()=>accept(item)} style={{background:"#47CD89",borderRadius:16,padding:"4px 14px",fontSize:11}}>✓ Accept</Btn>
+          </div>}
+          {done&&<div style={{fontSize:11,fontWeight:600,color:"#47CD89"}}>✓ Added to tasks</div>}
+        </div>})}
+      {noteItems.length>0&&<div style={{marginTop:12}}><div style={{fontSize:11,fontWeight:700,color:"#94A3B8",marginBottom:6}}>NOTES</div>{noteItems.map(n=><div key={n._id} style={{padding:"8px 12px",borderRadius:10,background:"#F8FAFC",border:"1px solid #E2E8F0",marginBottom:4,fontSize:12,color:"#64748B"}}>💭 {n.name||n.original}</div>)}</div>}
+    </div>}
+
+    {parsed.length===0&&!loading&&<div style={{background:"#fff",borderRadius:16,border:"1.5px dashed #D1D5DB",padding:"40px 24px",textAlign:"center"}}><div style={{fontSize:36,marginBottom:8}}>📝</div><div style={{fontSize:15,fontWeight:700,color:"#374151",marginBottom:4}}>Your inbox is empty</div><div style={{fontSize:12,color:"#94A3B8",lineHeight:1.6}}>Type meeting notes above and click Extract Tasks.<br/>AI will parse them into structured, actionable items.</div></div>}
+  </div>;
+}
+
+// ============================================================
+// MAIN APP
+// ============================================================
+function App() {
+  const [P,setP]=useState(DEFAULT_PROJECTS);
+  const [T,setT]=useState(DEFAULT_TASKS);
+  const [view,setView]=useState("dashboard");
+  const [af,setAf]=useState("all");
+  const [panel,setPanel]=useState(null);
+  const [loaded,setLoaded]=useState(false);
+
+  useEffect(()=>{(async()=>{try{const stored=localStorage.getItem(STORAGE_KEY);if(stored){const d=JSON.parse(stored);if(d.P)setP(d.P);if(d.T)setT(d.T)}}catch(e){console.log("storage load skip")}setLoaded(true)})()},[]);
+  const save=useCallback(async(p,t)=>{try{localStorage.setItem(STORAGE_KEY,JSON.stringify({P:p,T:t}))}catch(e){}},[]);
+  useEffect(()=>{if(loaded)save(P,T)},[P,T,loaded,save]);
+
+  const sP=(p)=>setP(v=>v.map(x=>x.id===p.id?p:x));
+  const dP=(id)=>{setP(v=>v.filter(x=>x.id!==id));setT(v=>v.map(t=>t.projectId===id?{...t,projectId:null}:t));setPanel(null)};
+  const aP=()=>{const n={id:uid(),name:"New Project",area:af!=="all"?af:"general",status:"Not Started",priority:"Medium",effort:"M",due:"",notes:"",created:new Date().toISOString().slice(0,10)};setP(v=>[...v,n]);setPanel({type:"project",item:n})};
+  const sT=(t)=>setT(v=>v.map(x=>x.id===t.id?t:x));
+  const dT=(id)=>{setT(v=>v.filter(x=>x.id!==id));if(panel?.item?.id===id)setPanel(null)};
+  const aT=(t)=>{const n={...t,id:uid()};setT(v=>[...v,n]);return n};
+  const aNT=()=>{const n={id:uid(),name:"New Task",projectId:null,area:af!=="all"?af:"general",status:"Not Started",priority:"Medium",effort:"M",due:"",notes:"",created:new Date().toISOString().slice(0,10)};setT(v=>[...v,n]);setPanel({type:"task",item:n})};
+
+  const fp=useMemo(()=>af==="all"?P:P.filter(p=>p.area===af),[P,af]);
+  const ft=useMemo(()=>af==="all"?T:T.filter(t=>t.area===af),[T,af]);
+  const cT=T.filter(t=>t.status==="Complete").length;
+  const ipP=P.filter(p=>p.status==="In Progress").length;
+  const od=P.filter(p=>p.due&&new Date(p.due)<new Date()&&p.status!=="Complete").length;
+  const cr=P.filter(p=>p.priority==="Critical"&&p.status!=="Complete").length;
+  const getA=id=>AREAS.find(a=>a.id===id)||AREAS[4];
+
+  useEffect(()=>{if(panel){const src=panel.type==="project"?P:T;const u=src.find(x=>x.id===panel.item.id);if(u&&JSON.stringify(u)!==JSON.stringify(panel.item))setPanel({...panel,item:u})}},[P,T]);
+
+  const statusPcts=STATUSES.map(s=>({s,count:P.filter(p=>p.status===s).length,pct:P.length?Math.round((P.filter(p=>p.status===s).length/P.length)*100):0}));
+
+  return (
+    <div style={{fontFamily:"'DM Sans','Segoe UI',sans-serif",background:"#F8FAFC",minHeight:"100vh",color:"#1E293B",display:"flex",height:"100vh",overflow:"hidden"}}>
+      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+      {panel&&<div onClick={()=>setPanel(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.15)",zIndex:999}}/>}
+
+      {/* SIDEBAR */}
+      <div style={{width:220,background:"#fff",borderRight:"1px solid #E2E8F0",padding:"20px 12px",display:"flex",flexDirection:"column",flexShrink:0,overflowY:"auto"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,padding:"0 8px",marginBottom:24}}>
+          <div style={{width:36,height:36,borderRadius:10,background:"linear-gradient(135deg,#6366F1,#8B5CF6)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:16,fontWeight:800}}>⚙️</div>
+          <div><div style={{fontSize:14,fontWeight:800,color:"#1E293B"}}>Command</div><div style={{fontSize:10,color:"#94A3B8",fontWeight:500}}>Rocklea Planning</div></div>
+        </div>
+        <div style={{fontSize:10,fontWeight:700,color:"#CBD5E1",textTransform:"uppercase",letterSpacing:1,padding:"0 8px",marginBottom:6}}>Overview</div>
+        <NavItem icon="📊" label="Dashboard" active={view==="dashboard"} onClick={()=>setView("dashboard")}/>
+        <NavItem icon="🤖" label="AI Inbox" active={view==="inbox"} onClick={()=>setView("inbox")} badge={0}/>
+        <div style={{fontSize:10,fontWeight:700,color:"#CBD5E1",textTransform:"uppercase",letterSpacing:1,padding:"0 8px",margin:"16px 0 6px"}}>Manage</div>
+        <NavItem icon="🎯" label="Projects" active={view==="projects"} onClick={()=>setView("projects")} badge={P.length}/>
+        <NavItem icon="📋" label="Tasks" active={view==="tasks"} onClick={()=>setView("tasks")} badge={T.filter(t=>t.status!=="Complete").length}/>
+        <NavItem icon="📌" label="Board" active={view==="board"} onClick={()=>setView("board")}/>
+        <div style={{flex:1}}/>
+        <div style={{fontSize:10,fontWeight:700,color:"#CBD5E1",textTransform:"uppercase",letterSpacing:1,padding:"0 8px",marginBottom:6}}>Areas</div>
+        <button onClick={()=>setAf("all")} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 16px",borderRadius:8,border:"none",background:af==="all"?"#F1F5F9":"transparent",color:af==="all"?"#1E293B":"#94A3B8",fontSize:12,fontWeight:500,cursor:"pointer",width:"100%",textAlign:"left"}}>All areas</button>
+        {AREAS.map(a=><button key={a.id} onClick={()=>setAf(a.id)} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 16px",borderRadius:8,border:"none",background:af===a.id?a.bg:"transparent",color:af===a.id?a.color:"#94A3B8",fontSize:12,fontWeight:af===a.id?600:500,cursor:"pointer",width:"100%",textAlign:"left"}}><span style={{width:8,height:8,borderRadius:4,background:a.color}}/>{a.name}</button>)}
+        <div style={{marginTop:16,borderTop:"1px solid #E2E8F0",paddingTop:12}}>
+          <NavItem icon="⚙️" label="Settings" active={view==="settings"} onClick={()=>setView("settings")}/>
+        </div>
+      </div>
+
+      {/* MAIN */}
+      <div style={{flex:1,padding:"24px 28px",overflowY:"auto"}}>
+
+        {/* SETTINGS */}
+        {view==="settings"&&<>
+          <div style={{fontSize:22,fontWeight:800,marginBottom:4}}>Settings</div>
+          <div style={{fontSize:13,color:"#94A3B8",marginBottom:20}}>Configure your Command Centre</div>
+          <div style={{background:"#fff",borderRadius:16,border:"1px solid #E2E8F0",padding:"24px",maxWidth:500,boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
+            <div style={{fontSize:14,fontWeight:700,marginBottom:4}}>🤖 AI Inbox — API Key</div>
+            <div style={{fontSize:12,color:"#94A3B8",marginBottom:12}}>Required for the AI task extraction feature. Get your key from <a href="https://console.anthropic.com/settings/keys" target="_blank" style={{color:"#6366F1"}}>console.anthropic.com</a></div>
+            <input type="password" defaultValue={localStorage.getItem("pcc-api-key")||""} onChange={e=>{localStorage.setItem("pcc-api-key",e.target.value);}} placeholder="sk-ant-api03-..." style={{width:"100%",padding:"10px 14px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:13,boxSizing:"border-box",fontFamily:"monospace"}}/>
+            <div style={{fontSize:10,color:"#CBD5E1",marginTop:6}}>Key is stored in your browser only — never sent anywhere except Anthropic's API</div>
+          </div>
+          <div style={{background:"#fff",borderRadius:16,border:"1px solid #E2E8F0",padding:"24px",maxWidth:500,marginTop:12,boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
+            <div style={{fontSize:14,fontWeight:700,marginBottom:4}}>💾 Data</div>
+            <div style={{fontSize:12,color:"#94A3B8",marginBottom:12}}>Your data is stored locally in this browser</div>
+            <div style={{display:"flex",gap:8}}>
+              <Btn small outline color="#6366F1" onClick={()=>{const d=JSON.stringify({P,T},null,2);const b=new Blob([d],{type:"application/json"});const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download="command-centre-backup.json";a.click()}}>Export Backup</Btn>
+              <Btn small outline color="#F97066" onClick={()=>{if(confirm("Reset all data to defaults? This cannot be undone.")){localStorage.removeItem(STORAGE_KEY);location.reload()}}}>Reset Data</Btn>
+            </div>
+          </div>
+        </>}
+
+        {/* DASHBOARD */}
+        {view==="dashboard"&&<>
+          <div style={{fontSize:22,fontWeight:800,marginBottom:4}}>Welcome back, Lachie 👋</div>
+          <div style={{fontSize:13,color:"#94A3B8",marginBottom:20}}>Here's your planning overview</div>
+
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:12,marginBottom:20}}>
+            {[{l:"Total Projects",v:P.length,s:`${ipP} active`,c:"#6366F1",i:"🎯"},{l:"Tasks Done",v:`${cT}/${T.length}`,s:`${T.length?Math.round(cT/T.length*100):0}%`,c:"#47CD89",i:"✅"},{l:"Critical",v:cr,s:cr?"Needs attention":"All clear",c:"#F97066",i:"🚨"},{l:"Overdue",v:od,s:od?"Past due":"On track",c:od?"#FB923C":"#47CD89",i:"⏰"}].map((c,i)=><div key={i} style={{background:"#fff",borderRadius:16,padding:"18px 20px",border:"1px solid #E2E8F0",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}><div style={{fontSize:10,fontWeight:600,color:"#94A3B8",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>{c.l}</div><div style={{fontSize:28,fontWeight:800,color:c.c}}>{c.v}</div><div style={{fontSize:11,color:"#94A3B8",marginTop:2}}>{c.s}</div></div>)}
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:"280px 1fr",gap:16,marginBottom:20}}>
+            {/* Donut */}
+            <div style={{background:"#fff",borderRadius:16,padding:"20px",border:"1px solid #E2E8F0",display:"flex",flexDirection:"column",alignItems:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
+              <div style={{fontSize:14,fontWeight:700,marginBottom:14,alignSelf:"flex-start"}}>Project Status</div>
+              <Donut size={140} stroke={16} center={P.length} sub="Projects" segments={statusPcts.filter(s=>s.pct>0).map(s=>({pct:s.pct,color:SC[s.s]}))}/>
+              <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:14,width:"100%"}}>
+                {statusPcts.map(s=><div key={s.s} style={{display:"flex",alignItems:"center",gap:8,fontSize:12}}><span style={{width:10,height:10,borderRadius:5,background:SC[s.s],flexShrink:0}}/><span style={{flex:1,color:"#64748B"}}>{s.s}</span><span style={{fontWeight:700,color:"#1E293B"}}>{s.count}</span><span style={{fontSize:10,color:"#94A3B8"}}>{s.pct}%</span></div>)}
+              </div>
+            </div>
+            {/* Area Cards */}
+            <div style={{background:"#fff",borderRadius:16,padding:"20px",border:"1px solid #E2E8F0",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
+              <div style={{fontSize:14,fontWeight:700,marginBottom:14}}>Areas</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                {AREAS.map(a=>{const ap=P.filter(p=>p.area===a.id);const at=T.filter(t=>t.area===a.id);const dn=at.filter(t=>t.status==="Complete").length;const pct=at.length?Math.round(dn/at.length*100):0;
+                  return <div key={a.id} onClick={()=>{setAf(a.id);setView("projects")}} style={{padding:"12px 14px",borderRadius:12,background:a.bg,cursor:"pointer",border:`1px solid ${a.color}20`,transition:"all 0.15s"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}><span style={{fontSize:12,fontWeight:700,color:a.color}}>{a.icon} {a.name}</span><span style={{fontSize:10,color:"#94A3B8"}}>{ap.length}p</span></div>
+                    <PBar value={pct} color={a.color} h={6}/>
+                    <div style={{fontSize:10,color:"#94A3B8",marginTop:3}}>{dn}/{at.length} tasks · {pct}%</div>
+                  </div>})}
+              </div>
+            </div>
+          </div>
+
+          <div style={{background:"#fff",borderRadius:16,padding:"20px",border:"1px solid #E2E8F0",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
+            <div style={{fontSize:14,fontWeight:700,marginBottom:12}}>Upcoming Deadlines</div>
+            {[...P].filter(p=>p.status!=="Complete"&&p.due).sort((a,b)=>new Date(a.due)-new Date(b.due)).slice(0,6).map((p,i,arr)=>{const a=getA(p.area);const isOd=new Date(p.due)<new Date();return <div key={p.id} onClick={()=>setPanel({type:"project",item:p})} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",borderRadius:12,background:isOd?"#FEF3F2":"#F8FAFC",marginBottom:4,cursor:"pointer",border:"1px solid #E2E8F0",transition:"all 0.15s"}}>
+              <div style={{width:36,height:36,borderRadius:10,background:a.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,border:`1px solid ${a.color}30`}}>{a.icon}</div>
+              <div style={{flex:1}}><div style={{fontSize:13,fontWeight:600}}>{p.name}</div><div style={{fontSize:10,color:"#94A3B8"}}>{a.name}</div></div>
+              <Badge color={SC[p.status]} bg={SBG[p.status]}>{p.status}</Badge>
+              <div style={{fontSize:12,fontWeight:600,color:isOd?"#F97066":"#64748B",minWidth:50,textAlign:"right"}}>{isOd?"⚠️ ":""}{new Date(p.due).toLocaleDateString("en-AU",{day:"numeric",month:"short"})}</div>
+            </div>})}
+          </div>
+        </>}
+
+        {/* INBOX */}
+        {view==="inbox"&&<><div style={{fontSize:22,fontWeight:800,marginBottom:4}}>🤖 AI Inbox</div><div style={{fontSize:13,color:"#94A3B8",marginBottom:20}}>Quick capture meeting notes into structured tasks</div><AIInbox projects={P} onAccept={aT}/></>}
+
+        {/* PROJECTS */}
+        {view==="projects"&&<><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><div><div style={{fontSize:22,fontWeight:800}}>Projects</div><div style={{fontSize:13,color:"#94A3B8"}}>{fp.length} projects{af!=="all"?` in ${getA(af).name}`:""}</div></div><Btn onClick={aP}>+ New Project</Btn></div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:12}}>
+            {fp.map(p=>{const a=getA(p.area);const pt=T.filter(t=>t.projectId===p.id);const dn=pt.filter(t=>t.status==="Complete").length;const prog=pt.length?Math.round(dn/pt.length*100):0;
+              return <div key={p.id} onClick={()=>setPanel({type:"project",item:p})} style={{background:"#fff",borderRadius:16,padding:"18px 20px",border:"1px solid #E2E8F0",cursor:"pointer",boxShadow:"0 1px 3px rgba(0,0,0,0.04)",transition:"all 0.15s"}}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><Badge color={a.color} bg={a.bg}>{a.icon} {a.name}</Badge><Badge color={SC[p.status]} bg={SBG[p.status]}>{p.status}</Badge></div>
+                <div style={{fontSize:15,fontWeight:700,marginBottom:8}}>{p.name}</div>
+                <PBar value={prog} color={a.color} h={6}/>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
+                  <div style={{display:"flex",gap:6,alignItems:"center"}}><span style={{width:9,height:9,borderRadius:5,background:PC[p.priority]}}/><span style={{fontSize:11,color:"#64748B"}}>{p.priority}</span><Badge color={EC[p.effort]} bg={`${EC[p.effort]}15`} s={{fontSize:10}}>{p.effort}</Badge></div>
+                  <span style={{fontSize:11,color:"#94A3B8"}}>{pt.length>0?`${dn}/${pt.length} tasks`:"0 tasks"} · {p.due?new Date(p.due).toLocaleDateString("en-AU",{day:"numeric",month:"short"}):"—"}</span>
+                </div>
+              </div>})}
+          </div>
+        </>}
+
+        {/* TASKS */}
+        {view==="tasks"&&<><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><div><div style={{fontSize:22,fontWeight:800}}>Tasks</div><div style={{fontSize:13,color:"#94A3B8"}}>{ft.length} tasks{af!=="all"?` in ${getA(af).name}`:""}</div></div><Btn onClick={aNT}>+ New Task</Btn></div>
+          {ft.sort((a,b)=>{const si=STATUSES.indexOf(a.status)-STATUSES.indexOf(b.status);return si!==0?si:PRIORITIES.indexOf(a.priority)-PRIORITIES.indexOf(b.priority)}).map(t=>{const a=getA(t.area);const proj=P.find(p=>p.id===t.projectId);return <div key={t.id} onClick={()=>setPanel({type:"task",item:t})} style={{background:"#fff",borderRadius:12,padding:"12px 16px",border:"1px solid #E2E8F0",cursor:"pointer",display:"flex",alignItems:"center",gap:12,marginBottom:4,boxShadow:"0 1px 2px rgba(0,0,0,0.03)"}}>
+            <div style={{width:22,height:22,borderRadius:22,border:`2px solid ${SC[t.status]}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,background:t.status==="Complete"?SC[t.status]:"transparent",color:t.status==="Complete"?"#fff":"transparent"}}>{t.status==="Complete"?"✓":""}</div>
+            <div style={{flex:1}}><div style={{fontSize:13,fontWeight:600,textDecoration:t.status==="Complete"?"line-through":"none",color:t.status==="Complete"?"#94A3B8":"#1E293B"}}>{t.name}</div>{proj&&<div style={{fontSize:10,color:"#94A3B8",marginTop:1}}>🔗 {proj.name}</div>}</div>
+            <Badge color={SC[t.status]} bg={SBG[t.status]}>{t.status}</Badge>
+            <span style={{width:9,height:9,borderRadius:5,background:PC[t.priority]}} title={t.priority}/>
+            <Badge color={EC[t.effort]} bg={`${EC[t.effort]}15`}>{t.effort}</Badge>
+            <span style={{fontSize:11,color:"#94A3B8",minWidth:40}}>{t.due?new Date(t.due).toLocaleDateString("en-AU",{day:"numeric",month:"short"}):""}</span>
+          </div>})}
+        </>}
+
+        {/* BOARD */}
+        {view==="board"&&<><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><div><div style={{fontSize:22,fontWeight:800}}>Board</div><div style={{fontSize:13,color:"#94A3B8"}}>Kanban view{af!=="all"?` · ${getA(af).name}`:""}</div></div><Btn onClick={aNT}>+ New Task</Btn></div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+            {STATUSES.map(status=>{const col=ft.filter(t=>t.status===status);return <div key={status}><div style={{fontSize:12,fontWeight:700,color:SC[status],marginBottom:8,display:"flex",alignItems:"center",gap:6}}><span style={{width:8,height:8,borderRadius:4,background:SC[status]}}/>{status} ({col.length})</div>
+              <div style={{display:"flex",flexDirection:"column",gap:6,minHeight:60}}>
+                {col.map(t=>{const a=getA(t.area);const proj=P.find(p=>p.id===t.projectId);return <div key={t.id} onClick={()=>setPanel({type:"task",item:t})} style={{background:"#fff",borderRadius:12,padding:"12px",border:"1px solid #E2E8F0",cursor:"pointer",boxShadow:"0 1px 2px rgba(0,0,0,0.03)"}}>
+                  <div style={{fontSize:12,fontWeight:600,marginBottom:4}}>{t.name}</div>
+                  {proj&&<div style={{fontSize:9,color:"#94A3B8",marginBottom:4}}>🔗 {proj.name}</div>}
+                  <div style={{display:"flex",gap:4,alignItems:"center",justifyContent:"space-between"}}><div style={{display:"flex",gap:4,alignItems:"center"}}><span style={{width:7,height:7,borderRadius:4,background:PC[t.priority]}}/><Badge color={EC[t.effort]} bg={`${EC[t.effort]}15`} s={{fontSize:9,padding:"1px 6px"}}>{t.effort}</Badge></div><span style={{fontSize:9,color:"#94A3B8"}}>{t.due?new Date(t.due).toLocaleDateString("en-AU",{day:"numeric",month:"short"}):""}</span></div>
+                </div>})}
+              </div>
+            </div>})}
+          </div>
+        </>}
+      </div>
+
+      {panel&&<DetailPanel type={panel.type} item={panel.item} onClose={()=>setPanel(null)} onSave={panel.type==="project"?sP:sT} onDelete={panel.type==="project"?dP:dT} tasks={T} projects={P} onSaveTask={sT} onDeleteTask={dT} onAddTask={aT} onOpenTask={t=>setPanel({type:"task",item:t})}/>}
+    </div>
+  );
+}
+
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
