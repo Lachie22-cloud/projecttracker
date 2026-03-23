@@ -13,17 +13,15 @@
 </head>
 <body>
 <div id="root"></div>
-
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
-
 <script type="text/babel">
 const { useState, useEffect, useCallback, useMemo } = React;
 
 
 
-const STORAGE_KEY = "pcc-v5";
+const STORAGE_KEY = "pcc-v6";
 function uid() { return "id_" + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
 
 const AREAS = [
@@ -80,11 +78,11 @@ const DEFAULT_TASKS = [
 // ============================================================
 async function aiProcess(raw, projs) {
   const apiKey = localStorage.getItem("pcc-api-key");
-  if (!apiKey) { alert("Set your Anthropic API key in Settings (gear icon in sidebar)"); return null; }
+  if (!apiKey) { alert("Set your Anthropic API key in Settings first"); return null; }
   const projCtx = projs.filter(p=>p.status!=="Complete").map(p=>`"${p.name}" (id:${p.id}, area:${AREAS.find(a=>a.id===p.area)?.name})`).join(", ");
   const areaCtx = AREAS.map(a=>`${a.name}(id:${a.id}): ${a.keywords.join(",")}`).join("; ");
   try {
-    const r = await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,messages:[{role:"user",content:`Extract tasks from these meeting notes for a production planner at Dulux Group Rocklea. Areas: ${areaCtx}. Active projects: ${projCtx}. Today is ${new Date().toISOString().slice(0,10)}. Return ONLY JSON array: [{"name":"clean name","area":"area-id","priority":"Critical|High|Medium|Low","effort":"S|M|L|XL","projectId":"id or null","due":"YYYY-MM-DD or null","type":"task|note","original":"raw text"}]. Notes:\n${raw}`}]})});
+    const r = await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,messages:[{role:"user",content:`Extract tasks from meeting notes for a production planner at Dulux Group Rocklea. Areas: ${areaCtx}. Active projects: ${projCtx}. Today is ${new Date().toISOString().slice(0,10)}. Return ONLY JSON array: [{"name":"clean name","area":"area-id","priority":"Critical|High|Medium|Low","effort":"S|M|L|XL","projectId":"id or null","due":"YYYY-MM-DD or null","type":"task|note","original":"raw text"}]. Notes:\n${raw}`}]})});
     const d = await r.json();
     return JSON.parse((d.content?.[0]?.text||"[]").replace(/```json|```/g,"").trim());
   } catch(e) { console.error(e); return null; }
@@ -262,10 +260,28 @@ function App() {
   const [view,setView]=useState("dashboard");
   const [af,setAf]=useState("all");
   const [panel,setPanel]=useState(null);
+  const [calMonth,setCalMonth]=useState(new Date());
+  const [calDay,setCalDay]=useState(null);
   const [loaded,setLoaded]=useState(false);
 
-  useEffect(()=>{(async()=>{try{const stored=localStorage.getItem(STORAGE_KEY);if(stored){const d=JSON.parse(stored);if(d.P)setP(d.P);if(d.T)setT(d.T)}}catch(e){console.log("storage load skip")}setLoaded(true)})()},[]);
-  const save=useCallback(async(p,t)=>{try{localStorage.setItem(STORAGE_KEY,JSON.stringify({P:p,T:t}))}catch(e){}},[]);
+  useEffect(()=>{
+    try{
+      // Try v6 first
+      let stored=localStorage.getItem(STORAGE_KEY);
+      if(!stored){
+        // Migrate from v5
+        const v5data=localStorage.getItem("pcc-v5");
+        if(v5data){
+          stored=v5data;
+          localStorage.setItem(STORAGE_KEY,v5data);
+          console.log("Migrated data from pcc-v5 to pcc-v6");
+        }
+      }
+      if(stored){const d=JSON.parse(stored);if(d.P)setP(d.P);if(d.T)setT(d.T)}
+    }catch(e){console.log("storage load skip")}
+    setLoaded(true);
+  },[]);
+  const save=useCallback((p,t)=>{try{localStorage.setItem(STORAGE_KEY,JSON.stringify({P:p,T:t}))}catch(e){}},[]);
   useEffect(()=>{if(loaded)save(P,T)},[P,T,loaded,save]);
 
   const sP=(p)=>setP(v=>v.map(x=>x.id===p.id?p:x));
@@ -306,6 +322,7 @@ function App() {
         <NavItem icon="🎯" label="Projects" active={view==="projects"} onClick={()=>setView("projects")} badge={P.length}/>
         <NavItem icon="📋" label="Tasks" active={view==="tasks"} onClick={()=>setView("tasks")} badge={T.filter(t=>t.status!=="Complete").length}/>
         <NavItem icon="📌" label="Board" active={view==="board"} onClick={()=>setView("board")}/>
+        <NavItem icon="📆" label="Calendar" active={view==="calendar"} onClick={()=>setView("calendar")}/>
         <div style={{flex:1}}/>
         <div style={{fontSize:10,fontWeight:700,color:"#CBD5E1",textTransform:"uppercase",letterSpacing:1,padding:"0 8px",marginBottom:6}}>Areas</div>
         <button onClick={()=>setAf("all")} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 16px",borderRadius:8,border:"none",background:af==="all"?"#F1F5F9":"transparent",color:af==="all"?"#1E293B":"#94A3B8",fontSize:12,fontWeight:500,cursor:"pointer",width:"100%",textAlign:"left"}}>All areas</button>
@@ -318,25 +335,157 @@ function App() {
       {/* MAIN */}
       <div style={{flex:1,padding:"24px 28px",overflowY:"auto"}}>
 
+
         {/* SETTINGS */}
         {view==="settings"&&<>
           <div style={{fontSize:22,fontWeight:800,marginBottom:4}}>Settings</div>
           <div style={{fontSize:13,color:"#94A3B8",marginBottom:20}}>Configure your Command Centre</div>
           <div style={{background:"#fff",borderRadius:16,border:"1px solid #E2E8F0",padding:"24px",maxWidth:500,boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
             <div style={{fontSize:14,fontWeight:700,marginBottom:4}}>🤖 AI Inbox — API Key</div>
-            <div style={{fontSize:12,color:"#94A3B8",marginBottom:12}}>Required for the AI task extraction feature. Get your key from <a href="https://console.anthropic.com/settings/keys" target="_blank" style={{color:"#6366F1"}}>console.anthropic.com</a></div>
-            <input type="password" defaultValue={localStorage.getItem("pcc-api-key")||""} onChange={e=>{localStorage.setItem("pcc-api-key",e.target.value);}} placeholder="sk-ant-api03-..." style={{width:"100%",padding:"10px 14px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:13,boxSizing:"border-box",fontFamily:"monospace"}}/>
-            <div style={{fontSize:10,color:"#CBD5E1",marginTop:6}}>Key is stored in your browser only — never sent anywhere except Anthropic's API</div>
+            <div style={{fontSize:12,color:"#94A3B8",marginBottom:12}}>Get your key from <a href="https://console.anthropic.com/settings/keys" target="_blank" style={{color:"#6366F1"}}>console.anthropic.com</a></div>
+            <input type="password" defaultValue={localStorage.getItem("pcc-api-key")||""} onChange={e=>{localStorage.setItem("pcc-api-key",e.target.value)}} placeholder="sk-ant-api03-..." style={{width:"100%",padding:"10px 14px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:13,boxSizing:"border-box",fontFamily:"monospace"}}/>
+            <div style={{fontSize:10,color:"#CBD5E1",marginTop:6}}>Stored in your browser only</div>
           </div>
           <div style={{background:"#fff",borderRadius:16,border:"1px solid #E2E8F0",padding:"24px",maxWidth:500,marginTop:12,boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
-            <div style={{fontSize:14,fontWeight:700,marginBottom:4}}>💾 Data</div>
-            <div style={{fontSize:12,color:"#94A3B8",marginBottom:12}}>Your data is stored locally in this browser</div>
+            <div style={{fontSize:14,fontWeight:700,marginBottom:12}}>💾 Data</div>
             <div style={{display:"flex",gap:8}}>
               <Btn small outline color="#6366F1" onClick={()=>{const d=JSON.stringify({P,T},null,2);const b=new Blob([d],{type:"application/json"});const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download="command-centre-backup.json";a.click()}}>Export Backup</Btn>
-              <Btn small outline color="#F97066" onClick={()=>{if(confirm("Reset all data to defaults? This cannot be undone.")){localStorage.removeItem(STORAGE_KEY);location.reload()}}}>Reset Data</Btn>
+              <Btn small outline color="#F97066" onClick={()=>{if(confirm("Reset all data?")){localStorage.removeItem(STORAGE_KEY);location.reload()}}}>Reset Data</Btn>
             </div>
           </div>
         </>}
+
+        {/* CALENDAR */}
+        {view==="calendar"&&(()=>{
+          const yr=calMonth.getFullYear(), mn=calMonth.getMonth();
+          const fd=new Date(yr,mn,1).getDay();
+          const dim=new Date(yr,mn+1,0).getDate();
+          const today=new Date().toISOString().slice(0,10);
+          const sp=(fd+6)%7;
+          const days=[];
+          for(let i=0;i<sp;i++)days.push(null);
+          for(let i=1;i<=dim;i++)days.push(i);
+          while(days.length%7!==0)days.push(null);
+
+          const allItems=[
+            ...T.map(t=>({...t,itemType:"task"})),
+            ...P.filter(p=>p.status!=="Complete"&&p.due).map(p=>({...p,itemType:"project"}))
+          ];
+          const getItems=(day)=>{
+            if(!day) return [];
+            const ds=`${yr}-${String(mn+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+            return allItems.filter(x=>x.due===ds);
+          };
+          const selItems=calDay?getItems(calDay):[];
+          const selDateStr=calDay?`${yr}-${String(mn+1).padStart(2,"0")}-${String(calDay).padStart(2,"0")}`:null;
+
+          const dayCounts={};
+          for(let d=1;d<=dim;d++)dayCounts[d]=getItems(d).length;
+          const maxCt=Math.max(...Object.values(dayCounts),1);
+
+          return <>
+            <div style={{fontSize:22,fontWeight:800,marginBottom:4}}>📆 Calendar</div>
+            <div style={{fontSize:13,color:"#94A3B8",marginBottom:20}}>Tasks and project deadlines</div>
+            <div style={{display:"flex",gap:16}}>
+              <div style={{flex:1}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <button onClick={()=>setCalMonth(new Date(yr,mn-1))} style={{background:"#fff",border:"1px solid #E2E8F0",width:34,height:34,borderRadius:10,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",color:"#64748B"}}>‹</button>
+                    <div style={{fontSize:18,fontWeight:800,minWidth:200,textAlign:"center"}}>{calMonth.toLocaleDateString("en-AU",{month:"long",year:"numeric"})}</div>
+                    <button onClick={()=>setCalMonth(new Date(yr,mn+1))} style={{background:"#fff",border:"1px solid #E2E8F0",width:34,height:34,borderRadius:10,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",color:"#64748B"}}>›</button>
+                  </div>
+                  <button onClick={()=>{setCalMonth(new Date());setCalDay(null)}} style={{background:"#EEF2FF",border:"none",padding:"6px 16px",borderRadius:20,fontSize:12,fontWeight:600,color:"#6366F1",cursor:"pointer"}}>Today</button>
+                </div>
+                <div style={{background:"#fff",borderRadius:16,border:"1px solid #E2E8F0",overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)"}}>
+                    {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d=> <div key={d} style={{padding:"10px 8px",textAlign:"center",fontSize:11,fontWeight:700,color:"#94A3B8",borderBottom:"1px solid #E2E8F0",background:"#F8FAFC"}}>{d}</div>)}
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)"}}>
+                    {days.map((day,i)=>{
+                      if(!day) return <div key={`e${i}`} style={{minHeight:95,borderBottom:"1px solid #F1F5F9",borderRight:i%7!==6?"1px solid #F1F5F9":"none",background:"#FAFAFA"}}/>;
+                      const ds=`${yr}-${String(mn+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+                      const di=getItems(day);
+                      const isT=ds===today;
+                      const isSel=day===calDay;
+                      const isWe=(i%7)>=5;
+                      const isPast=ds<today;
+                      return <div key={day} onClick={()=>setCalDay(day===calDay?null:day)} style={{minHeight:95,padding:"6px 7px",borderBottom:"1px solid #F1F5F9",borderRight:i%7!==6?"1px solid #F1F5F9":"none",background:isSel?"#EEF2FF":isT?"#F0FDF9":isWe?"#FAFAFA":"#fff",cursor:"pointer",transition:"background 0.1s",outline:isSel?"2px solid #6366F1":"none",outlineOffset:-2}}>
+                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+                          <div style={{fontSize:12,fontWeight:isT?800:500,color:isT?"#fff":isPast?"#CBD5E1":"#64748B",background:isT?"#6366F1":"none",width:isT?24:"auto",height:isT?24:"auto",borderRadius:12,display:"flex",alignItems:"center",justifyContent:"center"}}>{day}</div>
+                          {di.length>0&&<div style={{fontSize:9,fontWeight:700,color:"#94A3B8",background:"#F1F5F9",padding:"1px 5px",borderRadius:8}}>{di.length}</div>}
+                        </div>
+                        {di.slice(0,2).map(item=>{const a=getA(item.area);const isProj=item.itemType==="project";const isDone=item.status==="Complete";
+                          return <div key={item.id} style={{fontSize:10,fontWeight:isProj?700:600,padding:"2px 6px",borderRadius:4,marginBottom:2,background:isDone?"#F1F5F9":isProj?`${a.color}18`:a.bg,color:isDone?"#94A3B8":a.color,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textDecoration:isDone?"line-through":"none",borderLeft:isProj?`3px solid ${a.color}`:`2px solid ${a.color}60`}}>{isProj?"🎯 ":""}{item.name}</div>
+                        })}
+                        {di.length>2&&<div style={{fontSize:9,color:"#94A3B8",paddingLeft:4,fontWeight:600}}>+{di.length-2} more</div>}
+                      </div>;
+                    })}
+                  </div>
+                  <div style={{borderTop:"1px solid #E2E8F0",padding:"8px",background:"#F8FAFC"}}>
+                    <div style={{fontSize:10,fontWeight:700,color:"#94A3B8",marginBottom:6,paddingLeft:4}}>DAILY LOAD</div>
+                    <div style={{display:"flex",gap:2,alignItems:"end",height:28,paddingLeft:4}}>
+                      {Array.from({length:dim},(_,i)=>i+1).map(d=>{const ct=dayCounts[d]||0;const h=ct>0?Math.max(4,(ct/maxCt)*28):2;const ds=`${yr}-${String(mn+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;const isT=ds===today;
+                        return <div key={d} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center"}}><div style={{width:"100%",maxWidth:14,height:h,borderRadius:2,background:ct===0?"#E2E8F0":isT?"#6366F1":ct>=3?"#F97066":ct>=2?"#FDB022":"#47CD89",transition:"height 0.3s"}}/></div>
+                      })}
+                    </div>
+                    <div style={{display:"flex",gap:2,paddingLeft:4,marginTop:2}}>
+                      {Array.from({length:dim},(_,i)=>i+1).map(d=> <div key={d} style={{flex:1,textAlign:"center",fontSize:7,color:"#CBD5E1"}}>{d}</div>)}
+                    </div>
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:16,marginTop:10,paddingLeft:4}}>
+                  <div style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"#64748B"}}><div style={{width:16,height:8,borderRadius:2,background:"#EFF8FF",borderLeft:"2px solid #53B1FD60"}}/>Task</div>
+                  <div style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"#64748B"}}><div style={{width:16,height:8,borderRadius:2,background:"#53B1FD18",borderLeft:"3px solid #53B1FD"}}/>Project</div>
+                  <div style={{display:"flex",gap:12,fontSize:11,color:"#64748B",marginLeft:"auto"}}>
+                    <span style={{display:"flex",alignItems:"center",gap:3}}><div style={{width:8,height:8,borderRadius:2,background:"#47CD89"}}/>1</span>
+                    <span style={{display:"flex",alignItems:"center",gap:3}}><div style={{width:8,height:8,borderRadius:2,background:"#FDB022"}}/>2</span>
+                    <span style={{display:"flex",alignItems:"center",gap:3}}><div style={{width:8,height:8,borderRadius:2,background:"#F97066"}}/>3+</span>
+                  </div>
+                </div>
+              </div>
+              {calDay&&<div style={{width:320,flexShrink:0}}>
+                <div style={{background:"#fff",borderRadius:16,border:"1px solid #E2E8F0",overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.04)",position:"sticky",top:24}}>
+                  <div style={{padding:"16px 20px",background:"#F8FAFC",borderBottom:"1px solid #E2E8F0"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <div>
+                        <div style={{fontSize:11,fontWeight:700,color:"#94A3B8",textTransform:"uppercase",letterSpacing:0.5}}>{new Date(yr,mn,calDay).toLocaleDateString("en-AU",{weekday:"long"})}</div>
+                        <div style={{fontSize:22,fontWeight:800,color:"#1E293B"}}>{new Date(yr,mn,calDay).toLocaleDateString("en-AU",{day:"numeric",month:"long"})}</div>
+                      </div>
+                      <button onClick={()=>setCalDay(null)} style={{background:"#F1F5F9",border:"none",width:28,height:28,borderRadius:8,cursor:"pointer",fontSize:14,color:"#94A3B8",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+                    </div>
+                    <div style={{fontSize:12,color:"#94A3B8",marginTop:4}}>{selItems.length} item{selItems.length!==1?"s":""}</div>
+                  </div>
+                  <div style={{padding:"12px 16px",maxHeight:500,overflowY:"auto"}}>
+                    {selItems.length===0&&<div style={{textAlign:"center",padding:"24px 0",color:"#CBD5E1",fontSize:13}}>No items scheduled</div>}
+                    {selItems.filter(x=>x.itemType==="project").map(item=>{const a=getA(item.area);
+                      return <div key={item.id} onClick={()=>setPanel({type:"project",item})} style={{padding:"12px 14px",borderRadius:12,marginBottom:8,background:a.bg,border:`1.5px solid ${a.color}30`,cursor:"pointer"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}><span style={{fontSize:14}}>🎯</span><span style={{fontSize:10,fontWeight:700,color:a.color,textTransform:"uppercase",letterSpacing:0.5}}>PROJECT DEADLINE</span></div>
+                        <div style={{fontSize:14,fontWeight:700,color:"#1E293B",marginBottom:6}}>{item.name}</div>
+                        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}><Badge color={SC[item.status]} bg={SBG[item.status]}>{item.status}</Badge><Badge color={PC[item.priority]} bg={`${PC[item.priority]}15`}>{item.priority}</Badge></div>
+                      </div>
+                    })}
+                    {selItems.filter(x=>x.itemType==="task").map(item=>{const a=getA(item.area);const proj=P.find(p=>p.id===item.projectId);const isDone=item.status==="Complete";
+                      return <div key={item.id} onClick={()=>setPanel({type:"task",item})} style={{padding:"12px 14px",borderRadius:12,marginBottom:6,background:"#F8FAFC",border:"1px solid #E2E8F0",borderLeft:`3px solid ${a.color}`,cursor:"pointer",opacity:isDone?0.6:1}}>
+                        <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
+                          <div style={{width:20,height:20,borderRadius:20,marginTop:1,border:`2px solid ${SC[item.status]}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,background:isDone?SC[item.status]:"transparent",color:isDone?"#fff":"transparent"}}>{isDone?"✓":""}</div>
+                          <div style={{flex:1}}>
+                            <div style={{fontSize:13,fontWeight:600,textDecoration:isDone?"line-through":"none",color:isDone?"#94A3B8":"#1E293B",marginBottom:4}}>{item.name}</div>
+                            {proj&&<div style={{fontSize:10,color:"#94A3B8",marginBottom:6}}>🔗 {proj.name}</div>}
+                            <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                              <Badge color={a.color} bg={a.bg}>{a.icon} {a.name}</Badge>
+                              <span style={{display:"flex",alignItems:"center",gap:3,fontSize:10,color:"#64748B"}}><span style={{width:7,height:7,borderRadius:4,background:PC[item.priority]}}/>{item.priority}</span>
+                              <Badge color={EC[item.effort]} bg={`${EC[item.effort]}15`}>{item.effort}</Badge>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    })}
+                  </div>
+                </div>
+              </div>}
+            </div>
+          </>;
+        })()}
 
         {/* DASHBOARD */}
         {view==="dashboard"&&<>
