@@ -21,7 +21,42 @@ const { useState, useEffect, useCallback, useMemo } = React;
 
 
 
-const STORAGE_KEY = "pcc-v6";
+const STORAGE_KEY = "pcc-v8";
+
+function getNextDue(due, recurrence) {
+  if (!due || !recurrence) return null;
+  const d = new Date(due + "T00:00:00");
+  if (recurrence === "daily") d.setDate(d.getDate() + 1);
+  else if (recurrence === "weekly") d.setDate(d.getDate() + 7);
+  else if (recurrence === "monthly") d.setMonth(d.getMonth() + 1);
+  else if (recurrence && recurrence.type === "custom") d.setDate(d.getDate() + (recurrence.days || 7));
+  return d.toISOString().slice(0, 10);
+}
+
+function getRecurrenceLabel(rec) {
+  if (!rec) return null;
+  if (rec === "daily") return "Daily";
+  if (rec === "weekly") return "Weekly";
+  if (rec === "monthly") return "Monthly";
+  if (rec && rec.type === "custom") return "Every " + rec.days + " days";
+  return null;
+}
+
+function generateGhostDates(due, recurrence, endDate, limit) {
+  if (!due || !recurrence) return [];
+  const dates = [];
+  let current = due;
+  const maxDate = endDate || "2027-12-31";
+  const maxCount = limit || 12;
+  for (let i = 0; i < maxCount; i++) {
+    const next = getNextDue(current, recurrence);
+    if (!next || next > maxDate) break;
+    dates.push(next);
+    current = next;
+  }
+  return dates;
+}
+
 function uid() { return "id_" + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
 
 const AREAS = [
@@ -55,7 +90,7 @@ const DEFAULT_PROJECTS = [
 ];
 
 const DEFAULT_TASKS = [
-  { id:"t1",name:"Map supplier list to material groups",projectId:"p1",area:"raw-materials",status:"Complete",priority:"High",effort:"M",due:"2026-03-20",notes:"",created:"2026-03-01" },
+  { id:"t1",name:"Map supplier list to material groups",projectId:"p1",area:"raw-materials",status:"Complete",priority:"High",effort:"M",due:"2026-03-20",notes:"",created:"2026-03-01",recurrence:null,recurrenceEnd:null },
   { id:"t2",name:"Get quotes from 3 alt suppliers",projectId:"p1",area:"raw-materials",status:"In Progress",priority:"High",effort:"L",due:"2026-04-05",notes:"",created:"2026-03-05" },
   { id:"t3",name:"Review cost-benefit with procurement",projectId:"p1",area:"raw-materials",status:"Not Started",priority:"Medium",effort:"S",due:"2026-04-15",notes:"",created:"2026-03-05" },
   { id:"t4",name:"Finalise Q3 demand from IBP",projectId:"p3",area:"scheduling",status:"Complete",priority:"Critical",effort:"M",due:"2026-03-25",notes:"",created:"2026-02-15" },
@@ -70,7 +105,9 @@ const DEFAULT_TASKS = [
   { id:"t13",name:"Categorise exceptions by impact",projectId:"p10",area:"scheduling",status:"In Progress",priority:"High",effort:"L",due:"2026-04-05",notes:"",created:"2026-03-10" },
   { id:"t14",name:"Update dashboard layout sheet",projectId:null,area:"general",status:"Not Started",priority:"Medium",effort:"S",due:"2026-04-10",notes:"",created:"2026-03-15" },
   { id:"t15",name:"Chase TAS pallet discrepancy",projectId:null,area:"general",status:"In Progress",priority:"Medium",effort:"S",due:"2026-03-28",notes:"",created:"2026-03-18" },
-  { id:"t16",name:"Mid-year review direct reports",projectId:null,area:"people",status:"Not Started",priority:"High",effort:"L",due:"2026-05-15",notes:"",created:"2026-03-15" },
+  { id:"t16",name:"Mid-year review direct reports",projectId:null,area:"people",status:"Not Started",priority:"High",effort:"L",due:"2026-05-15",notes:"",created:"2026-03-15",recurrence:null,recurrenceEnd:null },
+  { id:"t17r",name:"Monthly MRP Exception Review",projectId:"p10",area:"scheduling",status:"Not Started",priority:"High",effort:"M",due:"2026-04-15",notes:"Standard monthly review",created:"2026-03-20",recurrence:"monthly",recurrenceEnd:"2026-12-31" },
+  { id:"t18r",name:"Weekly S&OP Slide Prep",projectId:null,area:"general",status:"Not Started",priority:"Medium",effort:"S",due:"2026-03-28",notes:"",created:"2026-03-20",recurrence:"weekly",recurrenceEnd:null },
 ];
 
 // ============================================================
@@ -86,6 +123,20 @@ async function aiProcess(raw, projs) {
     const d = await r.json();
     return JSON.parse((d.content?.[0]?.text||"[]").replace(/```json|```/g,"").trim());
   } catch(e) { console.error(e); return null; }
+}
+
+
+async function aiSummarise(projects, tasks) {
+  const apiKey = localStorage.getItem("pcc-api-key");
+  if (!apiKey) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  const pData = projects.map(p => "[" + p.status + "] " + p.name + " (" + p.priority + ", due:" + (p.due||"none") + ", area:" + (AREAS.find(a=>a.id===p.area)||{}).name + ")").join("\n");
+  const tData = tasks.map(t => { const proj = projects.find(p=>p.id===t.projectId); return "[" + t.status + "] " + t.name + " (" + t.priority + ", due:" + (t.due||"none") + ", project:" + (proj?proj.name:"none") + ")"; }).join("\n");
+  try {
+    const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-dangerous-direct-browser-access": "true" }, body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1500, messages: [{ role: "user", content: "You are a planning assistant for a production planner at Dulux Group Rocklea. Today is " + today + ". Analyse their work and provide a morning briefing. Be direct and actionable.\n\nPROJECTS:\n" + pData + "\n\nTASKS:\n" + tData + "\n\nReturn ONLY valid JSON (no markdown, no backticks):\n{\n\"greeting\": \"short motivational one-liner\",\n\"critical\": [\"critical/urgent items\"],\n\"overdue\": [\"overdue items with days overdue\"],\n\"today_focus\": [\"3-5 focus items for today\"],\n\"this_week\": [\"key deliverables this week\"],\n\"blockers\": [\"blocked items\"],\n\"wins\": [\"recently completed items\"],\n\"risk_areas\": [\"areas falling behind\"],\n\"recommendation\": \"one paragraph strategic recommendation\"\n}" }] }) });
+    const d = await r.json();
+    return JSON.parse((d.content?.[0]?.text || "{}").replace(/```json|```/g, "").trim());
+  } catch (e) { console.error(e); return null; }
 }
 
 // ============================================================
@@ -152,6 +203,7 @@ function DetailPanel({type,item,onClose,onSave,onDelete,tasks,projects,onSaveTas
           <button onClick={onClose} style={{background:"#F1F5F9",border:"none",width:28,height:28,borderRadius:8,cursor:"pointer",fontSize:14,color:"#94A3B8",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
         </div>
         <input value={f.name} onChange={e=>upd("name",e.target.value)} style={{width:"100%",fontSize:18,fontWeight:700,border:"none",background:"transparent",color:"#1E293B",outline:"none",padding:0,boxSizing:"border-box",fontFamily:"inherit"}}/>
+        {f.recurrence&&<div style={{fontSize:11,color:"#6366F1",fontWeight:600,marginTop:4}}>🔁 Repeats: {getRecurrenceLabel(f.recurrence)}{f.due&&f.recurrence==="weekly"?" on "+new Date(f.due+"T00:00:00").toLocaleDateString("en-AU",{weekday:"long"})+"s":""}{f.due&&f.recurrence==="monthly"?" on the "+new Date(f.due+"T00:00:00").getDate()+["th","st","nd","rd"][(new Date(f.due+"T00:00:00").getDate()%10>3||[11,12,13].includes(new Date(f.due+"T00:00:00").getDate()%100))?0:new Date(f.due+"T00:00:00").getDate()%10]:""}{f.recurrenceEnd?" until "+new Date(f.recurrenceEnd).toLocaleDateString("en-AU",{day:"numeric",month:"short",year:"numeric"}):""}</div>}
       </div>
       <div style={{flex:1,overflowY:"auto",padding:"18px 24px"}}>
         <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:16}}>
@@ -162,13 +214,16 @@ function DetailPanel({type,item,onClose,onSave,onDelete,tasks,projects,onSaveTas
           <div><div style={{fontSize:11,fontWeight:600,color:"#94A3B8",marginBottom:4}}>Effort</div><div style={{display:"flex",gap:4}}>{EFFORTS.map(e=><button key={e} onClick={()=>upd("effort",e)} style={{padding:"4px 10px",borderRadius:8,border:f.effort===e?`2px solid ${EC[e]}`:"1.5px solid #E2E8F0",background:f.effort===e?`${EC[e]}15`:"#fff",color:f.effort===e?EC[e]:"#94A3B8",fontSize:11,fontWeight:700,cursor:"pointer"}}>{e}</button>)}</div></div>
           <div><div style={{fontSize:11,fontWeight:600,color:"#94A3B8",marginBottom:4}}>Area</div><select value={f.area} onChange={e=>upd("area",e.target.value)} style={{width:"100%",padding:"8px 10px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12,background:"#fff",color:"#1E293B"}}>{AREAS.map(a=><option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}</select></div>
           <div><div style={{fontSize:11,fontWeight:600,color:"#94A3B8",marginBottom:4}}>Due Date</div><input type="date" value={f.due||""} onChange={e=>upd("due",e.target.value)} style={{width:"100%",padding:"8px 10px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12,background:"#fff",color:"#1E293B",boxSizing:"border-box"}}/></div>
+          <div><div style={{fontSize:11,fontWeight:600,color:"#94A3B8",marginBottom:4}}>🔁 Recurrence</div><select value={typeof f.recurrence==="object"?"custom":f.recurrence||"none"} onChange={e=>{const v=e.target.value;if(v==="none")upd("recurrence",null);else if(v==="custom")upd("recurrence",{type:"custom",days:14});else upd("recurrence",v)}} style={{width:"100%",padding:"8px 10px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12,background:"#fff"}}><option value="none">None</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="custom">Custom</option></select></div>
+          {f.recurrence&&typeof f.recurrence==="object"&&f.recurrence.type==="custom"&&<div><div style={{fontSize:11,fontWeight:600,color:"#94A3B8",marginBottom:4}}>Every X days</div><input type="number" value={f.recurrence.days||14} onChange={e=>upd("recurrence",{type:"custom",days:Math.max(1,parseInt(e.target.value)||1)})} min={1} style={{width:"100%",padding:"8px 10px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12,boxSizing:"border-box"}}/></div>}
+          {f.recurrence&&<div><div style={{fontSize:11,fontWeight:600,color:"#94A3B8",marginBottom:4}}>End date (optional)</div><input type="date" value={f.recurrenceEnd||""} onChange={e=>upd("recurrenceEnd",e.target.value||null)} style={{width:"100%",padding:"8px 10px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12,boxSizing:"border-box"}}/></div>}
           {type==="task"&&<div style={{gridColumn:"1/3"}}><div style={{fontSize:11,fontWeight:600,color:"#94A3B8",marginBottom:4}}>Project</div><select value={f.projectId||""} onChange={e=>upd("projectId",e.target.value||null)} style={{width:"100%",padding:"8px 10px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12,background:"#fff",color:"#1E293B"}}><option value="">— No project —</option>{(projects||[]).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>}
         </div>
         {type==="task"&&parent&&<div style={{background:"#F8FAFC",borderRadius:12,padding:"12px 14px",marginBottom:16,border:"1px solid #E2E8F0"}}><div style={{fontSize:10,fontWeight:700,color:"#94A3B8",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Parent Project</div><div style={{fontSize:14,fontWeight:700,color:"#1E293B"}}>{parent.name}</div><div style={{display:"flex",gap:6,marginTop:6}}><Badge color={SC[parent.status]} bg={SBG[parent.status]}>{parent.status}</Badge><span style={{fontSize:11,color:"#94A3B8"}}>Due {parent.due?new Date(parent.due).toLocaleDateString("en-AU",{day:"numeric",month:"short"}):"—"}</span></div></div>}
         {type==="project"&&linked.length>0&&<div style={{marginBottom:16,display:"flex",alignItems:"center",gap:16}}><Donut size={70} stroke={8} center={`${prog}%`} segments={[{pct:prog,color:area.color}]}/><div><div style={{fontSize:22,fontWeight:800,color:"#1E293B"}}>{done}<span style={{fontSize:14,fontWeight:500,color:"#94A3B8"}}>/{linked.length}</span></div><div style={{fontSize:12,color:"#94A3B8"}}>tasks complete</div></div></div>}
         <div style={{marginBottom:16}}><div style={{fontSize:11,fontWeight:600,color:"#94A3B8",marginBottom:4}}>Notes</div><textarea value={f.notes||""} onChange={e=>upd("notes",e.target.value)} placeholder="Add notes..." rows={3} style={{width:"100%",padding:"10px 12px",borderRadius:12,border:"1.5px solid #E2E8F0",fontSize:13,resize:"vertical",fontFamily:"inherit",boxSizing:"border-box",lineHeight:1.5,color:"#374151",background:"#F8FAFC"}}/></div>
         {type==="project"&&<div><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><span style={{fontSize:12,fontWeight:700,color:"#1E293B"}}>Tasks ({linked.length})</span><button onClick={()=>setAdding(true)} style={{background:"#EEF2FF",border:"none",padding:"4px 12px",borderRadius:16,fontSize:11,fontWeight:600,color:"#6366F1",cursor:"pointer"}}>+ Add task</button></div>
-        {adding&&<div style={{display:"flex",gap:6,marginBottom:8}}><input value={nn} onChange={e=>setNn(e.target.value)} placeholder="Task name..." autoFocus onKeyDown={e=>{if(e.key==="Enter"&&nn.trim()){onAddTask({name:nn.trim(),projectId:f.id,area:f.area,status:"Not Started",priority:"Medium",effort:"M",due:"",notes:"",created:new Date().toISOString().slice(0,10)});setNn("");setAdding(false)}}} style={{flex:1,padding:"8px 12px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12}}/><Btn small onClick={()=>{if(nn.trim()){onAddTask({name:nn.trim(),projectId:f.id,area:f.area,status:"Not Started",priority:"Medium",effort:"M",due:"",notes:"",created:new Date().toISOString().slice(0,10)});setNn("");setAdding(false)}}}>Add</Btn></div>}
+        {adding&&<div style={{display:"flex",gap:6,marginBottom:8}}><input value={nn} onChange={e=>setNn(e.target.value)} placeholder="Task name..." autoFocus onKeyDown={e=>{if(e.key==="Enter"&&nn.trim()){onAddTask({name:nn.trim(),projectId:f.id,area:f.area,status:"Not Started",priority:"Medium",effort:"M",due:"",notes:"",created:new Date().toISOString().slice(0,10),recurrence:null,recurrenceEnd:null});setNn("");setAdding(false)}}} style={{flex:1,padding:"8px 12px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12}}/><Btn small onClick={()=>{if(nn.trim()){onAddTask({name:nn.trim(),projectId:f.id,area:f.area,status:"Not Started",priority:"Medium",effort:"M",due:"",notes:"",created:new Date().toISOString().slice(0,10),recurrence:null,recurrenceEnd:null});setNn("");setAdding(false)}}}>Add</Btn></div>}
         {linked.sort((a,b)=>a.status==="Complete"&&b.status!=="Complete"?1:a.status!=="Complete"&&b.status==="Complete"?-1:0).map(t=><div key={t.id} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",borderRadius:10,background:"#F8FAFC",border:"1px solid #E2E8F0",marginBottom:4}}>
           <button onClick={()=>{const i=STATUSES.indexOf(t.status);onSaveTask({...t,status:STATUSES[(i+1)%STATUSES.length]})}} style={{width:22,height:22,borderRadius:22,border:`2px solid ${SC[t.status]}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,cursor:"pointer",background:t.status==="Complete"?SC[t.status]:"transparent",color:t.status==="Complete"?"#fff":"transparent",transition:"all 0.15s"}}>{t.status==="Complete"?"✓":""}</button>
           <div style={{flex:1,cursor:"pointer"}} onClick={()=>onOpenTask(t)}><div style={{fontSize:12,fontWeight:600,textDecoration:t.status==="Complete"?"line-through":"none",color:t.status==="Complete"?"#94A3B8":"#1E293B"}}>{t.name}</div></div>
@@ -198,7 +253,7 @@ function AIInbox({projects,onAccept}) {
     setLoading(false);
   };
   const edit=(id,k,v)=>setParsed(p=>p.map(x=>x._id===id?{...x,[k]:v}:x));
-  const accept=(item)=>{onAccept({name:item.name,area:item.area||"general",priority:item.priority||"Medium",effort:item.effort||"M",projectId:item.projectId||null,due:item.due||"",status:"Not Started",notes:item.original?`Captured: "${item.original}"`:"",created:new Date().toISOString().slice(0,10)});setAccepted(p=>new Set([...p,item._id]))};
+  const accept=(item)=>{onAccept({name:item.name,area:item.area||"general",priority:item.priority||"Medium",effort:item.effort||"M",projectId:item.projectId||null,due:item.due||"",status:"Not Started",notes:item.original?`Captured: "${item.original}"`:"",created:new Date().toISOString().slice(0,10),recurrence:null,recurrenceEnd:null});setAccepted(p=>new Set([...p,item._id]))};
   const taskItems=parsed.filter(p=>p.type==="task");
   const noteItems=parsed.filter(p=>p.type==="note");
 
@@ -262,6 +317,12 @@ function App() {
   const [panel,setPanel]=useState(null);
   const [calMonth,setCalMonth]=useState(new Date());
   const [calDay,setCalDay]=useState(null);
+  const [selP,setSelP]=useState(new Set());
+  const [selT,setSelT]=useState(new Set());
+  const [bulkAction,setBulkAction]=useState(null);
+  const [briefing,setBriefing]=useState(null);
+  const [briefLoading,setBriefLoading]=useState(false);
+  const [dragTask,setDragTask]=useState(null);
   const [loaded,setLoaded]=useState(false);
 
   useEffect(()=>{
@@ -269,17 +330,47 @@ function App() {
       // Try v6 first
       let stored=localStorage.getItem(STORAGE_KEY);
       if(!stored){
-        // Migrate from v5
-        const v5data=localStorage.getItem("pcc-v5");
-        if(v5data){
-          stored=v5data;
-          localStorage.setItem(STORAGE_KEY,v5data);
-          console.log("Migrated data from pcc-v5 to pcc-v6");
+        // Migrate from v5 or v6
+        const prev=localStorage.getItem("pcc-v7")||localStorage.getItem("pcc-v6")||localStorage.getItem("pcc-v5");
+        if(prev){
+          stored=prev;
+          localStorage.setItem(STORAGE_KEY,prev);
+          console.log("Migrated data to pcc-v8");
         }
       }
       if(stored){const d=JSON.parse(stored);if(d.P)setP(d.P);if(d.T)setT(d.T)}
     }catch(e){console.log("storage load skip")}
     setLoaded(true);
+    // Auto-generate AI briefing at 6am AEST (UTC+10), cached 24hrs
+    try {
+      const cached = localStorage.getItem("pcc-briefing");
+      if (cached) {
+        const cb = JSON.parse(cached);
+        setBriefing(cb.data);
+        // Check if we need to refresh (past 6am AEST today and cache is from before 6am)
+        const now = new Date();
+        const aestNow = new Date(now.getTime() + 10 * 60 * 60 * 1000);
+        const aestHour = aestNow.getUTCHours();
+        const cacheTime = new Date(cb.time);
+        const aestCache = new Date(cacheTime.getTime() + 10 * 60 * 60 * 1000);
+        const cacheDateStr = aestCache.toISOString().slice(0, 10);
+        const todayDateStr = aestNow.toISOString().slice(0, 10);
+        const needsRefresh = (todayDateStr !== cacheDateStr && aestHour >= 6) || (!cb.data);
+        if (needsRefresh && localStorage.getItem("pcc-api-key")) {
+          setBriefLoading(true);
+          aiSummarise(
+            stored ? (JSON.parse(stored).P || DEFAULT_PROJECTS) : DEFAULT_PROJECTS,
+            stored ? (JSON.parse(stored).T || DEFAULT_TASKS) : DEFAULT_TASKS
+          ).then(r => { if (r) { setBriefing(r); localStorage.setItem("pcc-briefing", JSON.stringify({ data: r, time: new Date().toISOString() })); } setBriefLoading(false); });
+        }
+      } else if (localStorage.getItem("pcc-api-key")) {
+        setBriefLoading(true);
+        aiSummarise(
+          stored ? (JSON.parse(stored).P || DEFAULT_PROJECTS) : DEFAULT_PROJECTS,
+          stored ? (JSON.parse(stored).T || DEFAULT_TASKS) : DEFAULT_TASKS
+        ).then(r => { if (r) { setBriefing(r); localStorage.setItem("pcc-briefing", JSON.stringify({ data: r, time: new Date().toISOString() })); } setBriefLoading(false); });
+      }
+    } catch(e) { console.log("briefing skip"); }
   },[]);
   const save=useCallback((p,t)=>{try{localStorage.setItem(STORAGE_KEY,JSON.stringify({P:p,T:t}))}catch(e){}},[]);
   useEffect(()=>{if(loaded)save(P,T)},[P,T,loaded,save]);
@@ -287,10 +378,45 @@ function App() {
   const sP=(p)=>setP(v=>v.map(x=>x.id===p.id?p:x));
   const dP=(id)=>{setP(v=>v.filter(x=>x.id!==id));setT(v=>v.map(t=>t.projectId===id?{...t,projectId:null}:t));setPanel(null)};
   const aP=()=>{const n={id:uid(),name:"New Project",area:af!=="all"?af:"general",status:"Not Started",priority:"Medium",effort:"M",due:"",notes:"",created:new Date().toISOString().slice(0,10)};setP(v=>[...v,n]);setPanel({type:"project",item:n})};
-  const sT=(t)=>setT(v=>v.map(x=>x.id===t.id?t:x));
+  const sT=(t)=>{
+    setT(v=>{
+      const updated = v.map(x=>x.id===t.id?t:x);
+      // Auto-create next recurring task when completed
+      const old = v.find(x=>x.id===t.id);
+      if(t.status==="Complete" && old && old.status!=="Complete" && t.recurrence) {
+        const nextDue = getNextDue(t.due, t.recurrence);
+        if(nextDue && (!t.recurrenceEnd || nextDue <= t.recurrenceEnd)) {
+          const newTask = {...t, id:uid(), status:"Not Started", due:nextDue, notes:t.notes, created:new Date().toISOString().slice(0,10), recurrenceParent:t.recurrenceParent||t.id};
+          return [...updated, newTask];
+        }
+      }
+      return updated;
+    });
+  };
   const dT=(id)=>{setT(v=>v.filter(x=>x.id!==id));if(panel?.item?.id===id)setPanel(null)};
   const aT=(t)=>{const n={...t,id:uid()};setT(v=>[...v,n]);return n};
-  const aNT=()=>{const n={id:uid(),name:"New Task",projectId:null,area:af!=="all"?af:"general",status:"Not Started",priority:"Medium",effort:"M",due:"",notes:"",created:new Date().toISOString().slice(0,10)};setT(v=>[...v,n]);setPanel({type:"task",item:n})};
+  const aNT=()=>{const n={id:uid(),name:"New Task",projectId:null,area:af!=="all"?af:"general",status:"Not Started",priority:"Medium",effort:"M",due:"",notes:"",created:new Date().toISOString().slice(0,10),recurrence:null,recurrenceEnd:null};setT(v=>[...v,n]);setPanel({type:"task",item:n})};
+
+
+  // Bulk actions
+  const bulkDeleteP = () => { if (confirm("Delete " + selP.size + " projects?")) { setP(v => v.filter(x => !selP.has(x.id))); setT(v => v.map(t => selP.has(t.projectId) ? {...t, projectId: null} : t)); setSelP(new Set()); } };
+  const bulkDeleteT = () => { if (confirm("Delete " + selT.size + " tasks?")) { setT(v => v.filter(x => !selT.has(x.id))); setSelT(new Set()); } };
+  const bulkStatusP = (s) => { setP(v => v.map(x => selP.has(x.id) ? {...x, status: s} : x)); setSelP(new Set()); setBulkAction(null); };
+  const bulkStatusT = (s) => { setT(v => v.map(x => selT.has(x.id) ? {...x, status: s} : x)); setSelT(new Set()); setBulkAction(null); };
+  const bulkPriorityP = (p) => { setP(v => v.map(x => selP.has(x.id) ? {...x, priority: p} : x)); setSelP(new Set()); setBulkAction(null); };
+  const bulkPriorityT = (p) => { setT(v => v.map(x => selT.has(x.id) ? {...x, priority: p} : x)); setSelT(new Set()); setBulkAction(null); };
+  const bulkAssignT = (pid) => { setT(v => v.map(x => selT.has(x.id) ? {...x, projectId: pid || null} : x)); setSelT(new Set()); setBulkAction(null); };
+  const toggleSelP = (id) => setSelP(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleSelT = (id) => setSelT(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const selAllP = () => setSelP(new Set(fp.map(p => p.id)));
+  const selAllT = () => setSelT(new Set(ft.map(t => t.id)));
+  const refreshBriefing = async () => { setBriefLoading(true); const r = await aiSummarise(P, T); if (r) { setBriefing(r); localStorage.setItem("pcc-briefing", JSON.stringify({ data: r, time: new Date().toISOString() })); } setBriefLoading(false); };
+  const handleCalDrop = (taskId, newDay) => {
+    const yr = calMonth.getFullYear(), mn = calMonth.getMonth();
+    const newDate = yr + "-" + String(mn+1).padStart(2,"0") + "-" + String(newDay).padStart(2,"0");
+    setT(v => v.map(x => x.id === taskId ? {...x, due: newDate} : x));
+    setDragTask(null);
+  };
 
   const fp=useMemo(()=>af==="all"?P:P.filter(p=>p.area===af),[P,af]);
   const ft=useMemo(()=>af==="all"?T:T.filter(t=>t.area===af),[T,af]);
@@ -369,7 +495,10 @@ function App() {
 
           const allItems=[
             ...T.map(t=>({...t,itemType:"task"})),
-            ...P.filter(p=>p.status!=="Complete"&&p.due).map(p=>({...p,itemType:"project"}))
+            ...P.filter(p=>p.status!=="Complete"&&p.due).map(p=>({...p,itemType:"project"})),
+            ...T.filter(t=>t.recurrence&&t.due&&t.status!=="Complete").flatMap(t=>{
+              return generateGhostDates(t.due,t.recurrence,t.recurrenceEnd,12).map((d,i)=>({...t,id:t.id+"_ghost_"+i,due:d,itemType:"ghost",originalName:t.name}));
+            })
           ];
           const getItems=(day)=>{
             if(!day) return [];
@@ -409,13 +538,13 @@ function App() {
                       const isSel=day===calDay;
                       const isWe=(i%7)>=5;
                       const isPast=ds<today;
-                      return <div key={day} onClick={()=>setCalDay(day===calDay?null:day)} style={{minHeight:95,padding:"6px 7px",borderBottom:"1px solid #F1F5F9",borderRight:i%7!==6?"1px solid #F1F5F9":"none",background:isSel?"#EEF2FF":isT?"#F0FDF9":isWe?"#FAFAFA":"#fff",cursor:"pointer",transition:"background 0.1s",outline:isSel?"2px solid #6366F1":"none",outlineOffset:-2}}>
+                      return <div key={day} onClick={()=>setCalDay(day===calDay?null:day)} onDragOver={e=>{e.preventDefault();e.currentTarget.style.background="#EEF2FF"}} onDragLeave={e=>{e.currentTarget.style.background=""}} onDrop={e=>{e.preventDefault();e.currentTarget.style.background="";const tid=e.dataTransfer.getData("text/plain");if(tid)handleCalDrop(tid,day)}} style={{minHeight:95,padding:"6px 7px",borderBottom:"1px solid #F1F5F9",borderRight:i%7!==6?"1px solid #F1F5F9":"none",background:isSel?"#EEF2FF":isT?"#F0FDF9":isWe?"#FAFAFA":"#fff",cursor:"pointer",transition:"background 0.1s",outline:isSel?"2px solid #6366F1":"none",outlineOffset:-2}}>
                         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
                           <div style={{fontSize:12,fontWeight:isT?800:500,color:isT?"#fff":isPast?"#CBD5E1":"#64748B",background:isT?"#6366F1":"none",width:isT?24:"auto",height:isT?24:"auto",borderRadius:12,display:"flex",alignItems:"center",justifyContent:"center"}}>{day}</div>
                           {di.length>0&&<div style={{fontSize:9,fontWeight:700,color:"#94A3B8",background:"#F1F5F9",padding:"1px 5px",borderRadius:8}}>{di.length}</div>}
                         </div>
-                        {di.slice(0,2).map(item=>{const a=getA(item.area);const isProj=item.itemType==="project";const isDone=item.status==="Complete";
-                          return <div key={item.id} style={{fontSize:10,fontWeight:isProj?700:600,padding:"2px 6px",borderRadius:4,marginBottom:2,background:isDone?"#F1F5F9":isProj?`${a.color}18`:a.bg,color:isDone?"#94A3B8":a.color,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textDecoration:isDone?"line-through":"none",borderLeft:isProj?`3px solid ${a.color}`:`2px solid ${a.color}60`}}>{isProj?"🎯 ":""}{item.name}</div>
+                        {di.slice(0,2).map(item=>{const a=getA(item.area);const isProj=item.itemType==="project";const isGhost=item.itemType==="ghost";const isDone=item.status==="Complete";
+                          return <div key={item.id} style={{fontSize:10,fontWeight:isProj?700:600,padding:"2px 6px",borderRadius:4,marginBottom:2,background:isGhost?`${a.color}08`:isDone?"#F1F5F9":isProj?`${a.color}18`:a.bg,color:isDone?"#94A3B8":a.color,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textDecoration:isDone?"line-through":"none",borderLeft:isGhost?`2px dashed ${a.color}40`:isProj?`3px solid ${a.color}`:`2px solid ${a.color}60`}}>{isGhost?"🔁 ":isProj?"🎯 ":""}{item.name}</div>
                         })}
                         {di.length>2&&<div style={{fontSize:9,color:"#94A3B8",paddingLeft:4,fontWeight:600}}>+{di.length-2} more</div>}
                       </div>;
@@ -465,7 +594,7 @@ function App() {
                       </div>
                     })}
                     {selItems.filter(x=>x.itemType==="task").map(item=>{const a=getA(item.area);const proj=P.find(p=>p.id===item.projectId);const isDone=item.status==="Complete";
-                      return <div key={item.id} onClick={()=>setPanel({type:"task",item})} style={{padding:"12px 14px",borderRadius:12,marginBottom:6,background:"#F8FAFC",border:"1px solid #E2E8F0",borderLeft:`3px solid ${a.color}`,cursor:"pointer",opacity:isDone?0.6:1}}>
+                      return <div key={item.id} draggable={!isDone} onDragStart={e=>{e.dataTransfer.setData("text/plain",item.id);setDragTask(item.id)}} onDragEnd={()=>setDragTask(null)} onClick={()=>setPanel({type:"task",item})} style={{padding:"12px 14px",borderRadius:12,marginBottom:6,background:dragTask===item.id?"#EEF2FF":"#F8FAFC",border:dragTask===item.id?"2px solid #6366F1":"1px solid #E2E8F0",borderLeft:`3px solid ${a.color}`,cursor:isDone?"pointer":"grab",opacity:isDone?0.6:1}}>
                         <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
                           <div style={{width:20,height:20,borderRadius:20,marginTop:1,border:`2px solid ${SC[item.status]}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,background:isDone?SC[item.status]:"transparent",color:isDone?"#fff":"transparent"}}>{isDone?"✓":""}</div>
                           <div style={{flex:1}}>
@@ -489,6 +618,33 @@ function App() {
 
         {/* DASHBOARD */}
         {view==="dashboard"&&<>
+          {/* AI BRIEFING */}
+          <div style={{background:"#fff",borderRadius:16,border:"1px solid #E2E8F0",padding:"20px",marginBottom:16,boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:briefing?12:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <div style={{width:32,height:32,borderRadius:10,background:"linear-gradient(135deg,#F97066,#FB923C)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>🧠</div>
+                <div><div style={{fontSize:14,fontWeight:700}}>Daily Briefing</div>
+                {briefing&&<div style={{fontSize:10,color:"#CBD5E1"}}>{(() => { try { const c=JSON.parse(localStorage.getItem("pcc-briefing")||"{}"); return c.time ? "Generated " + new Date(c.time).toLocaleString("en-AU",{hour:"numeric",minute:"2-digit",hour12:true,day:"numeric",month:"short"}) : ""; } catch(e) { return ""; } })()}</div>}
+                </div>
+              </div>
+              <button onClick={refreshBriefing} disabled={briefLoading} style={{background:briefLoading?"#94A3B8":"#EEF2FF",border:"none",padding:"6px 14px",borderRadius:16,fontSize:11,fontWeight:600,color:briefLoading?"#fff":"#6366F1",cursor:"pointer"}}>{briefLoading?"Generating...":"↻ Refresh"}</button>
+            </div>
+            {!briefing&&!briefLoading&&!localStorage.getItem("pcc-api-key")&&<div style={{fontSize:12,color:"#94A3B8",textAlign:"center",padding:"8px 0"}}>Set your API key in Settings to enable AI briefings</div>}
+            {briefLoading&&!briefing&&<div style={{fontSize:12,color:"#94A3B8",textAlign:"center",padding:"8px 0"}}>🧠 Analysing your projects and tasks...</div>}
+            {briefing&&<div>
+              {briefing.greeting&&<div style={{fontSize:14,fontWeight:600,color:"#1E293B",padding:"10px 14px",background:"linear-gradient(135deg,#EEF2FF,#F8FAFC)",borderRadius:10,marginBottom:10,borderLeft:"4px solid #6366F1"}}>💬 {briefing.greeting}</div>}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                {briefing.critical&&briefing.critical.length>0&&<div style={{gridColumn:"1/3",padding:"10px 12px",borderRadius:10,background:"#FEF3F2",border:"1px solid #F9706620"}}><div style={{fontSize:11,fontWeight:700,color:"#F97066",marginBottom:4}}>🚨 CRITICAL</div>{briefing.critical.map((c,i)=> <div key={i} style={{fontSize:12,color:"#1E293B",marginBottom:2}}>{c}</div>)}</div>}
+                {briefing.overdue&&briefing.overdue.length>0&&<div style={{padding:"10px 12px",borderRadius:10,background:"#FFFAEB",border:"1px solid #FDB02220"}}><div style={{fontSize:11,fontWeight:700,color:"#FDB022",marginBottom:4}}>⚠️ OVERDUE</div>{briefing.overdue.map((c,i)=> <div key={i} style={{fontSize:11,color:"#64748B",marginBottom:2}}>{c}</div>)}</div>}
+                {briefing.blockers&&briefing.blockers.length>0&&<div style={{padding:"10px 12px",borderRadius:10,background:"#F1F5F9",border:"1px solid #94A3B820"}}><div style={{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:4}}>🔒 BLOCKERS</div>{briefing.blockers.map((c,i)=> <div key={i} style={{fontSize:11,color:"#64748B",marginBottom:2}}>{c}</div>)}</div>}
+                {briefing.today_focus&&briefing.today_focus.length>0&&<div style={{gridColumn:"1/3",padding:"10px 12px",borderRadius:10,background:"#EEF2FF",border:"1px solid #6366F120"}}><div style={{fontSize:11,fontWeight:700,color:"#6366F1",marginBottom:4}}>🎯 TODAY'S FOCUS</div>{briefing.today_focus.map((c,i)=> <div key={i} style={{fontSize:12,color:"#1E293B",marginBottom:2}}>• {c}</div>)}</div>}
+                {briefing.this_week&&briefing.this_week.length>0&&<div style={{padding:"10px 12px",borderRadius:10,background:"#EFF8FF",border:"1px solid #53B1FD20"}}><div style={{fontSize:11,fontWeight:700,color:"#53B1FD",marginBottom:4}}>📅 THIS WEEK</div>{briefing.this_week.map((c,i)=> <div key={i} style={{fontSize:11,color:"#64748B",marginBottom:2}}>{c}</div>)}</div>}
+                {briefing.wins&&briefing.wins.length>0&&<div style={{padding:"10px 12px",borderRadius:10,background:"#ECFDF3",border:"1px solid #47CD8920"}}><div style={{fontSize:11,fontWeight:700,color:"#47CD89",marginBottom:4}}>🏆 WINS</div>{briefing.wins.map((c,i)=> <div key={i} style={{fontSize:11,color:"#64748B",marginBottom:2}}>{c}</div>)}</div>}
+              </div>
+              {briefing.recommendation&&<div style={{marginTop:8,padding:"10px 12px",borderRadius:10,background:"#F8FAFC",border:"1px solid #E2E8F0",fontSize:12,color:"#475569",lineHeight:1.6}}><span style={{fontWeight:700,color:"#1E293B"}}>💡 Recommendation: </span>{briefing.recommendation}</div>}
+            </div>}
+          </div>}
+
           <div style={{fontSize:22,fontWeight:800,marginBottom:4}}>Welcome back, Lachie 👋</div>
           <div style={{fontSize:13,color:"#94A3B8",marginBottom:20}}>Here's your planning overview</div>
 
@@ -534,10 +690,12 @@ function App() {
         {view==="inbox"&&<><div style={{fontSize:22,fontWeight:800,marginBottom:4}}>🤖 AI Inbox</div><div style={{fontSize:13,color:"#94A3B8",marginBottom:20}}>Quick capture meeting notes into structured tasks</div><AIInbox projects={P} onAccept={aT}/></>}
 
         {/* PROJECTS */}
-        {view==="projects"&&<><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><div><div style={{fontSize:22,fontWeight:800}}>Projects</div><div style={{fontSize:13,color:"#94A3B8"}}>{fp.length} projects{af!=="all"?` in ${getA(af).name}`:""}</div></div><Btn onClick={aP}>+ New Project</Btn></div>
+        {view==="projects"&&<><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><div style={{display:"flex",alignItems:"center",gap:12}}><input type="checkbox" checked={selP.size===fp.length&&fp.length>0} onChange={()=>selP.size===fp.length?setSelP(new Set()):selAllP()} style={{width:18,height:18,cursor:"pointer",accentColor:"#6366F1"}}/><div><div style={{fontSize:22,fontWeight:800}}>Projects</div><div style={{fontSize:13,color:"#94A3B8"}}>{fp.length} projects{af!=="all"?` in ${getA(af).name}`:""}</div></div></div><Btn onClick={aP}>+ New Project</Btn></div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:12}}>
-            {fp.map(p=>{const a=getA(p.area);const pt=T.filter(t=>t.projectId===p.id);const dn=pt.filter(t=>t.status==="Complete").length;const prog=pt.length?Math.round(dn/pt.length*100):0;
-              return <div key={p.id} onClick={()=>setPanel({type:"project",item:p})} style={{background:"#fff",borderRadius:16,padding:"18px 20px",border:"1px solid #E2E8F0",cursor:"pointer",boxShadow:"0 1px 3px rgba(0,0,0,0.04)",transition:"all 0.15s"}}>
+            {fp.map(p=>{const a=getA(p.area);const pt=T.filter(t=>t.projectId===p.id);const dn=pt.filter(t=>t.status==="Complete").length;const prog=pt.length?Math.round(dn/pt.length*100):0;const isSel=selP.has(p.id);
+              return <div key={p.id} style={{background:"#fff",borderRadius:16,padding:"18px 20px",border:isSel?"2px solid #6366F1":"1px solid #E2E8F0",cursor:"pointer",boxShadow:isSel?"0 0 0 3px #6366F120":"0 1px 3px rgba(0,0,0,0.04)",transition:"all 0.15s",position:"relative"}}>
+                <input type="checkbox" checked={isSel} onChange={()=>toggleSelP(p.id)} onClick={e=>e.stopPropagation()} style={{position:"absolute",top:12,left:12,width:16,height:16,cursor:"pointer",accentColor:"#6366F1"}}/>
+                <div onClick={()=>setPanel({type:"project",item:p})} style={{paddingLeft:24}}>
                 <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><Badge color={a.color} bg={a.bg}>{a.icon} {a.name}</Badge><Badge color={SC[p.status]} bg={SBG[p.status]}>{p.status}</Badge></div>
                 <div style={{fontSize:15,fontWeight:700,marginBottom:8}}>{p.name}</div>
                 <PBar value={prog} color={a.color} h={6}/>
@@ -545,29 +703,52 @@ function App() {
                   <div style={{display:"flex",gap:6,alignItems:"center"}}><span style={{width:9,height:9,borderRadius:5,background:PC[p.priority]}}/><span style={{fontSize:11,color:"#64748B"}}>{p.priority}</span><Badge color={EC[p.effort]} bg={`${EC[p.effort]}15`} s={{fontSize:10}}>{p.effort}</Badge></div>
                   <span style={{fontSize:11,color:"#94A3B8"}}>{pt.length>0?`${dn}/${pt.length} tasks`:"0 tasks"} · {p.due?new Date(p.due).toLocaleDateString("en-AU",{day:"numeric",month:"short"}):"—"}</span>
                 </div>
+                </div>
               </div>})}
           </div>
+          {selP.size>0&&<div style={{position:"fixed",bottom:20,left:"50%",transform:"translateX(-50%)",background:"#1E293B",color:"#fff",borderRadius:16,padding:"12px 20px",display:"flex",alignItems:"center",gap:12,boxShadow:"0 8px 30px rgba(0,0,0,0.25)",zIndex:900}}>
+            <span style={{fontSize:13,fontWeight:700}}>{selP.size} selected</span>
+            <div style={{width:1,height:20,background:"#475569"}}/>
+            <button onClick={bulkDeleteP} style={{background:"#F97066",color:"#fff",border:"none",padding:"6px 14px",borderRadius:10,fontSize:12,fontWeight:600,cursor:"pointer"}}>🗑 Delete</button>
+            <select onChange={e=>{if(e.target.value)bulkStatusP(e.target.value);e.target.value=""}} style={{background:"#334155",color:"#fff",border:"none",padding:"6px 10px",borderRadius:10,fontSize:12,cursor:"pointer"}}><option value="">Status...</option>{STATUSES.map(s=> <option key={s} value={s}>{s}</option>)}</select>
+            <select onChange={e=>{if(e.target.value)bulkPriorityP(e.target.value);e.target.value=""}} style={{background:"#334155",color:"#fff",border:"none",padding:"6px 10px",borderRadius:10,fontSize:12,cursor:"pointer"}}><option value="">Priority...</option>{PRIORITIES.map(p=> <option key={p} value={p}>{p}</option>)}</select>
+            <button onClick={()=>bulkStatusP("Complete")} style={{background:"#47CD89",color:"#fff",border:"none",padding:"6px 14px",borderRadius:10,fontSize:12,fontWeight:600,cursor:"pointer"}}>✓ Complete</button>
+            <button onClick={()=>setSelP(new Set())} style={{background:"none",color:"#94A3B8",border:"none",padding:"6px",cursor:"pointer",fontSize:14}}>✕</button>
+          </div>}
         </>}
 
         {/* TASKS */}
-        {view==="tasks"&&<><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><div><div style={{fontSize:22,fontWeight:800}}>Tasks</div><div style={{fontSize:13,color:"#94A3B8"}}>{ft.length} tasks{af!=="all"?` in ${getA(af).name}`:""}</div></div><Btn onClick={aNT}>+ New Task</Btn></div>
-          {ft.sort((a,b)=>{const si=STATUSES.indexOf(a.status)-STATUSES.indexOf(b.status);return si!==0?si:PRIORITIES.indexOf(a.priority)-PRIORITIES.indexOf(b.priority)}).map(t=>{const a=getA(t.area);const proj=P.find(p=>p.id===t.projectId);return <div key={t.id} onClick={()=>setPanel({type:"task",item:t})} style={{background:"#fff",borderRadius:12,padding:"12px 16px",border:"1px solid #E2E8F0",cursor:"pointer",display:"flex",alignItems:"center",gap:12,marginBottom:4,boxShadow:"0 1px 2px rgba(0,0,0,0.03)"}}>
+        {view==="tasks"&&<><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><div style={{display:"flex",alignItems:"center",gap:12}}><input type="checkbox" checked={selT.size===ft.length&&ft.length>0} onChange={()=>selT.size===ft.length?setSelT(new Set()):selAllT()} style={{width:18,height:18,cursor:"pointer",accentColor:"#6366F1"}}/><div><div style={{fontSize:22,fontWeight:800}}>Tasks</div><div style={{fontSize:13,color:"#94A3B8"}}>{ft.length} tasks{af!=="all"?` in ${getA(af).name}`:""}</div></div></div><Btn onClick={aNT}>+ New Task</Btn></div>
+          {ft.sort((a,b)=>{const si=STATUSES.indexOf(a.status)-STATUSES.indexOf(b.status);return si!==0?si:PRIORITIES.indexOf(a.priority)-PRIORITIES.indexOf(b.priority)}).map(t=>{const a=getA(t.area);const proj=P.find(p=>p.id===t.projectId);const isSel=selT.has(t.id);return <div key={t.id} style={{background:"#fff",borderRadius:12,padding:"12px 16px",border:isSel?"2px solid #6366F1":"1px solid #E2E8F0",cursor:"pointer",display:"flex",alignItems:"center",gap:12,marginBottom:4,boxShadow:isSel?"0 0 0 3px #6366F120":"0 1px 2px rgba(0,0,0,0.03)"}}>
+            <input type="checkbox" checked={isSel} onChange={()=>toggleSelT(t.id)} onClick={e=>e.stopPropagation()} style={{width:16,height:16,cursor:"pointer",accentColor:"#6366F1",flexShrink:0}}/>
+            <div onClick={()=>setPanel({type:"task",item:t})} style={{display:"flex",alignItems:"center",gap:12,flex:1}}>
             <div style={{width:22,height:22,borderRadius:22,border:`2px solid ${SC[t.status]}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,background:t.status==="Complete"?SC[t.status]:"transparent",color:t.status==="Complete"?"#fff":"transparent"}}>{t.status==="Complete"?"✓":""}</div>
-            <div style={{flex:1}}><div style={{fontSize:13,fontWeight:600,textDecoration:t.status==="Complete"?"line-through":"none",color:t.status==="Complete"?"#94A3B8":"#1E293B"}}>{t.name}</div>{proj&&<div style={{fontSize:10,color:"#94A3B8",marginTop:1}}>🔗 {proj.name}</div>}</div>
+            <div style={{flex:1}}><div style={{fontSize:13,fontWeight:600,textDecoration:t.status==="Complete"?"line-through":"none",color:t.status==="Complete"?"#94A3B8":"#1E293B"}}>{t.recurrence&&<span title={getRecurrenceLabel(t.recurrence)} style={{marginRight:4}}>🔁</span>}{t.name}</div>{proj&&<div style={{fontSize:10,color:"#94A3B8",marginTop:1}}>🔗 {proj.name}</div>}</div>
             <Badge color={SC[t.status]} bg={SBG[t.status]}>{t.status}</Badge>
             <span style={{width:9,height:9,borderRadius:5,background:PC[t.priority]}} title={t.priority}/>
             <Badge color={EC[t.effort]} bg={`${EC[t.effort]}15`}>{t.effort}</Badge>
             <span style={{fontSize:11,color:"#94A3B8",minWidth:40}}>{t.due?new Date(t.due).toLocaleDateString("en-AU",{day:"numeric",month:"short"}):""}</span>
+            </div>
           </div>})}
+          {selT.size>0&&<div style={{position:"fixed",bottom:20,left:"50%",transform:"translateX(-50%)",background:"#1E293B",color:"#fff",borderRadius:16,padding:"12px 20px",display:"flex",alignItems:"center",gap:12,boxShadow:"0 8px 30px rgba(0,0,0,0.25)",zIndex:900,flexWrap:"wrap"}}>
+            <span style={{fontSize:13,fontWeight:700}}>{selT.size} selected</span>
+            <div style={{width:1,height:20,background:"#475569"}}/>
+            <button onClick={bulkDeleteT} style={{background:"#F97066",color:"#fff",border:"none",padding:"6px 14px",borderRadius:10,fontSize:12,fontWeight:600,cursor:"pointer"}}>🗑 Delete</button>
+            <select onChange={e=>{if(e.target.value)bulkStatusT(e.target.value);e.target.value=""}} style={{background:"#334155",color:"#fff",border:"none",padding:"6px 10px",borderRadius:10,fontSize:12,cursor:"pointer"}}><option value="">Status...</option>{STATUSES.map(s=> <option key={s} value={s}>{s}</option>)}</select>
+            <select onChange={e=>{if(e.target.value)bulkPriorityT(e.target.value);e.target.value=""}} style={{background:"#334155",color:"#fff",border:"none",padding:"6px 10px",borderRadius:10,fontSize:12,cursor:"pointer"}}><option value="">Priority...</option>{PRIORITIES.map(p=> <option key={p} value={p}>{p}</option>)}</select>
+            <select onChange={e=>{if(e.target.value)bulkAssignT(e.target.value);e.target.value=""}} style={{background:"#334155",color:"#fff",border:"none",padding:"6px 10px",borderRadius:10,fontSize:12,cursor:"pointer"}}><option value="">Assign project...</option><option value="__none">No project</option>{P.map(p=> <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+            <button onClick={()=>bulkStatusT("Complete")} style={{background:"#47CD89",color:"#fff",border:"none",padding:"6px 14px",borderRadius:10,fontSize:12,fontWeight:600,cursor:"pointer"}}>✓ Complete</button>
+            <button onClick={()=>setSelT(new Set())} style={{background:"none",color:"#94A3B8",border:"none",padding:"6px",cursor:"pointer",fontSize:14}}>✕</button>
+          </div>}
         </>}
 
         {/* BOARD */}
-        {view==="board"&&<><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><div><div style={{fontSize:22,fontWeight:800}}>Board</div><div style={{fontSize:13,color:"#94A3B8"}}>Kanban view{af!=="all"?` · ${getA(af).name}`:""}</div></div><Btn onClick={aNT}>+ New Task</Btn></div>
+        {view==="board"&&<><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><div><div style={{fontSize:22,fontWeight:800}}>Board</div><div style={{fontSize:13,color:"#94A3B8"}}>Drag cards between columns{af!=="all"?` · ${getA(af).name}`:""}</div></div><Btn onClick={aNT}>+ New Task</Btn></div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-            {STATUSES.map(status=>{const col=ft.filter(t=>t.status===status);return <div key={status}><div style={{fontSize:12,fontWeight:700,color:SC[status],marginBottom:8,display:"flex",alignItems:"center",gap:6}}><span style={{width:8,height:8,borderRadius:4,background:SC[status]}}/>{status} ({col.length})</div>
+            {STATUSES.map(status=>{const col=ft.filter(t=>t.status===status);return <div key={status} onDragOver={e=>{e.preventDefault();e.currentTarget.style.background="#F1F5F9";e.currentTarget.style.borderRadius="12px"}} onDragLeave={e=>{e.currentTarget.style.background="";e.currentTarget.style.borderRadius=""}} onDrop={e=>{e.preventDefault();e.currentTarget.style.background="";const tid=e.dataTransfer.getData("text/plain");if(tid){const task=T.find(x=>x.id===tid);if(task)sT({...task,status})}}}><div style={{fontSize:12,fontWeight:700,color:SC[status],marginBottom:8,display:"flex",alignItems:"center",gap:6}}><span style={{width:8,height:8,borderRadius:4,background:SC[status]}}/>{status} ({col.length})</div>
               <div style={{display:"flex",flexDirection:"column",gap:6,minHeight:60}}>
-                {col.map(t=>{const a=getA(t.area);const proj=P.find(p=>p.id===t.projectId);return <div key={t.id} onClick={()=>setPanel({type:"task",item:t})} style={{background:"#fff",borderRadius:12,padding:"12px",border:"1px solid #E2E8F0",cursor:"pointer",boxShadow:"0 1px 2px rgba(0,0,0,0.03)"}}>
-                  <div style={{fontSize:12,fontWeight:600,marginBottom:4}}>{t.name}</div>
+                {col.map(t=>{const a=getA(t.area);const proj=P.find(p=>p.id===t.projectId);return <div key={t.id} draggable={true} onDragStart={e=>{e.dataTransfer.setData("text/plain",t.id);e.currentTarget.style.opacity="0.4"}} onDragEnd={e=>{e.currentTarget.style.opacity="1"}} onClick={()=>setPanel({type:"task",item:t})} style={{background:"#fff",borderRadius:12,padding:"12px",border:"1px solid #E2E8F0",cursor:"grab",boxShadow:"0 1px 2px rgba(0,0,0,0.03)",transition:"opacity 0.15s"}}>
+                  <div style={{fontSize:12,fontWeight:600,marginBottom:4}}>{t.recurrence&&<span style={{marginRight:3}}>🔁</span>}{t.name}</div>
                   {proj&&<div style={{fontSize:9,color:"#94A3B8",marginBottom:4}}>🔗 {proj.name}</div>}
                   <div style={{display:"flex",gap:4,alignItems:"center",justifyContent:"space-between"}}><div style={{display:"flex",gap:4,alignItems:"center"}}><span style={{width:7,height:7,borderRadius:4,background:PC[t.priority]}}/><Badge color={EC[t.effort]} bg={`${EC[t.effort]}15`} s={{fontSize:9,padding:"1px 6px"}}>{t.effort}</Badge></div><span style={{fontSize:9,color:"#94A3B8"}}>{t.due?new Date(t.due).toLocaleDateString("en-AU",{day:"numeric",month:"short"}):""}</span></div>
                 </div>})}
@@ -581,6 +762,7 @@ function App() {
     </div>
   );
 }
+
 
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
