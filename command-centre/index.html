@@ -153,8 +153,15 @@ function saveData(data) {
 // ============================================================
 // AI LAYER
 // ============================================================
+function getApiKey() {
+  const raw = localStorage.getItem(API_KEY_KEY);
+  if (!raw) return null;
+  // Strip any non-ASCII / invisible Unicode chars that break fetch headers
+  return raw.trim().replace(/[^\x20-\x7E]/g, "");
+}
+
 async function aiParseCapture(rawText, areas, projects, recentNotes) {
-  const apiKey = localStorage.getItem(API_KEY_KEY);
+  const apiKey = getApiKey();
   if (!apiKey) return null;
   const today = new Date().toISOString().slice(0, 10);
   const areaCtx = areas.map(a => `${a.name}(id:${a.id}): keywords=[${a.keywords.join(",")}]`).join("; ");
@@ -199,7 +206,7 @@ ${rawText}` }]
 }
 
 async function aiDigest(tasks, projects, areas) {
-  const apiKey = localStorage.getItem(API_KEY_KEY);
+  const apiKey = getApiKey();
   if (!apiKey) return null;
   const today = new Date().toISOString().slice(0, 10);
 
@@ -255,7 +262,7 @@ Return ONLY valid JSON (no markdown):
 }
 
 async function aiProposeProjects(notes, areas) {
-  const apiKey = localStorage.getItem(API_KEY_KEY);
+  const apiKey = getApiKey();
   if (!apiKey) return [];
   const unlinked = notes.filter(n => !n.extractedIds || n.extractedIds.length === 0).slice(-20);
   if (unlinked.length < 3) return [];
@@ -1114,7 +1121,7 @@ function App() {
           <div style={{ background:"var(--surface)", borderRadius:2, border:"1px solid var(--hairline)", padding:"24px", maxWidth:550, marginBottom:16 }}>
             <div style={{ fontSize:14, fontWeight:700, marginBottom:4 }}>🤖 Anthropic API Key</div>
             <div style={{ fontSize:12, color:"var(--muted)", marginBottom:12 }}>Get your key from <a href="https://console.anthropic.com/settings/keys" target="_blank" style={{ color:"var(--cyan)" }}>console.anthropic.com</a></div>
-            <input type="password" defaultValue={localStorage.getItem(API_KEY_KEY) || ""} onChange={e => localStorage.setItem(API_KEY_KEY, e.target.value)} placeholder="sk-ant-api03-..." style={{ width:"100%", padding:"10px 14px", borderRadius:2, border:"1px solid var(--hairline)", fontSize:13, boxSizing:"border-box", fontFamily:"var(--font-mono)", background:"var(--elevated)", color:"var(--text)" }} />
+            <input type="password" defaultValue={localStorage.getItem(API_KEY_KEY) || ""} onChange={e => localStorage.setItem(API_KEY_KEY, e.target.value.trim())} placeholder="sk-ant-api03-..." style={{ width:"100%", padding:"10px 14px", borderRadius:2, border:"1px solid var(--hairline)", fontSize:13, boxSizing:"border-box", fontFamily:"var(--font-mono)", background:"var(--elevated)", color:"var(--text)" }} />
             <div style={{ fontSize:10, color:"var(--muted)", marginTop:6, fontFamily:"var(--font-mono)" }}>Stored in your browser only</div>
           </div>
 
