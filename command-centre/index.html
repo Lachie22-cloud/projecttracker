@@ -3,12 +3,47 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Project Command Centre</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚙️</text></svg>">
+<title>Synapse — Second Brain</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'DM Sans', 'Segoe UI', sans-serif; }
-  #root { min-height: 100vh; }
+  :root {
+    --base: #07070B;
+    --surface: #10101A;
+    --elevated: #16161F;
+    --hairline: rgba(255,255,255,0.06);
+    --magenta: #FF2E93;
+    --cyan: #00E5FF;
+    --warning: #FFB020;
+    --success: #3DFFB8;
+    --text: #E8E8F0;
+    --muted: #8A8AA0;
+    --font-ui: 'Space Grotesk', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: var(--font-ui);
+    background: var(--base);
+    color: var(--text);
+    overflow: hidden;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  #root { min-height: 100vh; position: relative; z-index: 1; }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+  ::selection { background: rgba(255,46,147,0.3); }
+  input, textarea, select, button { font-family: inherit; }
+  input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.7); }
 </style>
 </head>
 <body>
@@ -17,11 +52,31 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
 <script type="text/babel">
-const { useState, useEffect, useCallback, useMemo } = React;
+const { useState, useEffect, useCallback, useMemo, useRef } = React;
 
+// ============================================================
+// CONSTANTS & UTILITIES
+// ============================================================
+const STORAGE_KEY = "pcc-v9-synapse";
+const API_KEY_KEY = "synapse-api-key";
 
-
-const STORAGE_KEY = "pcc-v8";
+function uid() { return "id_" + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
+function now() { return new Date().toISOString(); }
+function touchNow(item) { return { ...item, touchedAt: now(), updatedAt: now() }; }
+function daysSince(ts) { if (!ts) return 999; return Math.floor((Date.now() - new Date(ts).getTime()) / 86400000); }
+function isForgotten(item, n = 7) { return item.status !== "Complete" && daysSince(item.touchedAt || item.updatedAt || item.createdAt) > n; }
+function fmt(ts) { if (!ts) return ""; const d = new Date(ts); return d.toLocaleDateString("en-AU", { day:"numeric", month:"short" }); }
+function fmtTime(ts) { if (!ts) return ""; const d = new Date(ts); return d.toLocaleTimeString("en-AU", { hour:"2-digit", minute:"2-digit", hour12: false }); }
+function fmtFull(ts) { if (!ts) return ""; const d = new Date(ts); return d.toLocaleDateString("en-AU", { day:"numeric", month:"short", year:"numeric" }) + " " + fmtTime(ts); }
+function fmtRelative(ts) {
+  if (!ts) return "";
+  const d = daysSince(ts);
+  if (d === 0) return "today";
+  if (d === 1) return "yesterday";
+  if (d < 7) return d + "d ago";
+  if (d < 30) return Math.floor(d/7) + "w ago";
+  return Math.floor(d/30) + "mo ago";
+}
 
 function getNextDue(due, recurrence) {
   if (!due || !recurrence) return null;
@@ -57,713 +112,1091 @@ function generateGhostDates(due, recurrence, endDate, limit) {
   return dates;
 }
 
-function uid() { return "id_" + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
-
-const AREAS = [
-  { id: "raw-materials", name: "Raw Materials", color: "#F97066", bg: "#FEF3F2", icon: "🧪", keywords: ["resin","supplier","raw","material","chemical","pigment"] },
-  { id: "packaging", name: "Packaging", color: "#53B1FD", bg: "#EFF8FF", icon: "📦", keywords: ["box","label","carton","pallet","corrugated","pack","shrink"] },
-  { id: "scheduling", name: "Scheduling", color: "#FDB022", bg: "#FFFAEB", icon: "📅", keywords: ["schedule","batch","plan","MRP","production","CO05N","MD04","forecast","IBP","STO","Q3"] },
-  { id: "master-data", name: "Master Data", color: "#9B8AFB", bg: "#F4F3FF", icon: "🗄️", keywords: ["BOM","material master","CS03","MM03","SE16N","data","SAP"] },
-  { id: "general", name: "General", color: "#47CD89", bg: "#ECFDF3", icon: "⚡", keywords: ["report","meeting","slides","email","update","review","chase"] },
-  { id: "people", name: "People", color: "#F670C7", bg: "#FDF2FA", icon: "👥", keywords: ["ben","onboard","training","team","skills","feedback","hire","performance"] },
-];
-
 const STATUSES = ["Not Started", "In Progress", "On Hold", "Complete"];
-const SC = { "Not Started": "#94A3B8", "In Progress": "#53B1FD", "On Hold": "#FDB022", "Complete": "#47CD89" };
-const SBG = { "Not Started": "#F1F5F9", "In Progress": "#EFF8FF", "On Hold": "#FFFAEB", "Complete": "#ECFDF3" };
-const PRIORITIES = ["Critical","High","Medium","Low"];
-const PC = { Critical: "#F97066", High: "#FB923C", Medium: "#FDB022", Low: "#94A3B8" };
-const EFFORTS = ["S","M","L","XL"];
-const EC = { S: "#47CD89", M: "#53B1FD", L: "#FDB022", XL: "#F97066" };
+const SC = { "Not Started": "#8A8AA0", "In Progress": "#00E5FF", "On Hold": "#FFB020", "Complete": "#3DFFB8" };
+const PRIORITIES = ["Critical", "High", "Medium", "Low"];
+const PC = { Critical: "#FF2E93", High: "#FF6B4A", Medium: "#FFB020", Low: "#8A8AA0" };
+const EFFORTS = ["S", "M", "L", "XL"];
+const EC = { S: "#3DFFB8", M: "#00E5FF", L: "#FFB020", XL: "#FF2E93" };
 
-const DEFAULT_PROJECTS = [
-  { id:"p1",name:"RM Supplier Consolidation",area:"raw-materials",status:"In Progress",priority:"High",effort:"XL",due:"2026-05-15",notes:"Consolidating to reduce costs",created:"2026-03-01" },
-  { id:"p2",name:"New Corrugated Box Spec",area:"packaging",status:"Not Started",priority:"Medium",effort:"L",due:"2026-06-01",notes:"",created:"2026-03-10" },
-  { id:"p3",name:"Q3 Production Plan Build",area:"scheduling",status:"In Progress",priority:"Critical",effort:"XL",due:"2026-04-10",notes:"QLD, NSW, VIC plants",created:"2026-02-15" },
-  { id:"p4",name:"BOM Clean-up Phase 2",area:"master-data",status:"In Progress",priority:"High",effort:"L",due:"2026-04-30",notes:"Focus on inactive materials",created:"2026-03-01" },
-  { id:"p5",name:"SAP Report Automation",area:"general",status:"On Hold",priority:"Medium",effort:"M",due:"2026-05-20",notes:"Blocked by Z-program",created:"2026-02-20" },
-  { id:"p6",name:"Ben Onboarding — Month 2",area:"people",status:"In Progress",priority:"High",effort:"M",due:"2026-04-15",notes:"Progressing well",created:"2026-03-01" },
-  { id:"p7",name:"Resin Shortage Contingency",area:"raw-materials",status:"Complete",priority:"Critical",effort:"M",due:"2026-03-15",notes:"Resolved",created:"2026-02-01" },
-  { id:"p8",name:"Label Redesign — Trade Range",area:"packaging",status:"Not Started",priority:"Low",effort:"S",due:"2026-07-01",notes:"",created:"2026-03-15" },
-  { id:"p9",name:"Team Skills Matrix",area:"people",status:"Not Started",priority:"Medium",effort:"S",due:"2026-05-01",notes:"",created:"2026-03-10" },
-  { id:"p10",name:"MRP Exception Review",area:"scheduling",status:"In Progress",priority:"High",effort:"L",due:"2026-04-20",notes:"Building weekly review",created:"2026-03-05" },
+const DEFAULT_AREAS = [
+  { id: "work", name: "Work", color: "#00E5FF", accent: "#00E5FF", icon: "💼", keywords: ["meeting", "report", "email", "slides", "review", "deadline"], userCreated: false },
+  { id: "personal", name: "Personal", color: "#FF2E93", accent: "#FF2E93", icon: "🏠", keywords: ["home", "errand", "health", "appointment", "call"], userCreated: false },
+  { id: "ideas", name: "Ideas", color: "#9B6DFF", accent: "#9B6DFF", icon: "💡", keywords: ["idea", "think", "explore", "research", "blog", "write"], userCreated: false },
 ];
 
-const DEFAULT_TASKS = [
-  { id:"t1",name:"Map supplier list to material groups",projectId:"p1",area:"raw-materials",status:"Complete",priority:"High",effort:"M",due:"2026-03-20",notes:"",created:"2026-03-01",recurrence:null,recurrenceEnd:null },
-  { id:"t2",name:"Get quotes from 3 alt suppliers",projectId:"p1",area:"raw-materials",status:"In Progress",priority:"High",effort:"L",due:"2026-04-05",notes:"",created:"2026-03-05" },
-  { id:"t3",name:"Review cost-benefit with procurement",projectId:"p1",area:"raw-materials",status:"Not Started",priority:"Medium",effort:"S",due:"2026-04-15",notes:"",created:"2026-03-05" },
-  { id:"t4",name:"Finalise Q3 demand from IBP",projectId:"p3",area:"scheduling",status:"Complete",priority:"Critical",effort:"M",due:"2026-03-25",notes:"",created:"2026-02-15" },
-  { id:"t5",name:"Build batch schedule QLD",projectId:"p3",area:"scheduling",status:"Complete",priority:"Critical",effort:"L",due:"2026-03-28",notes:"",created:"2026-02-20" },
-  { id:"t6",name:"Validate material availability",projectId:"p3",area:"scheduling",status:"In Progress",priority:"High",effort:"M",due:"2026-04-02",notes:"",created:"2026-03-01" },
-  { id:"t7",name:"Build batch schedule NSW",projectId:"p3",area:"scheduling",status:"In Progress",priority:"Critical",effort:"L",due:"2026-04-05",notes:"",created:"2026-03-01" },
-  { id:"t8",name:"Review active BOMs for duplicates",projectId:"p4",area:"master-data",status:"In Progress",priority:"High",effort:"XL",due:"2026-04-10",notes:"",created:"2026-03-05" },
-  { id:"t9",name:"Set up Ben SAP access",projectId:"p6",area:"people",status:"Complete",priority:"High",effort:"S",due:"2026-03-10",notes:"",created:"2026-03-01" },
-  { id:"t10",name:"Shadow scheduling run with Ben",projectId:"p6",area:"people",status:"In Progress",priority:"High",effort:"M",due:"2026-04-01",notes:"",created:"2026-03-05" },
-  { id:"t11",name:"Fix goods receipt Z-program",projectId:"p5",area:"general",status:"On Hold",priority:"Medium",effort:"M",due:"2026-05-01",notes:"",created:"2026-02-20" },
-  { id:"t12",name:"Pull MD04 exception list",projectId:"p10",area:"scheduling",status:"Complete",priority:"High",effort:"M",due:"2026-03-25",notes:"",created:"2026-03-05" },
-  { id:"t13",name:"Categorise exceptions by impact",projectId:"p10",area:"scheduling",status:"In Progress",priority:"High",effort:"L",due:"2026-04-05",notes:"",created:"2026-03-10" },
-  { id:"t14",name:"Update dashboard layout sheet",projectId:null,area:"general",status:"Not Started",priority:"Medium",effort:"S",due:"2026-04-10",notes:"",created:"2026-03-15" },
-  { id:"t15",name:"Chase TAS pallet discrepancy",projectId:null,area:"general",status:"In Progress",priority:"Medium",effort:"S",due:"2026-03-28",notes:"",created:"2026-03-18" },
-  { id:"t16",name:"Mid-year review direct reports",projectId:null,area:"people",status:"Not Started",priority:"High",effort:"L",due:"2026-05-15",notes:"",created:"2026-03-15",recurrence:null,recurrenceEnd:null },
-  { id:"t17r",name:"Monthly MRP Exception Review",projectId:"p10",area:"scheduling",status:"Not Started",priority:"High",effort:"M",due:"2026-04-15",notes:"Standard monthly review",created:"2026-03-20",recurrence:"monthly",recurrenceEnd:"2026-12-31" },
-  { id:"t18r",name:"Weekly S&OP Slide Prep",projectId:null,area:"general",status:"Not Started",priority:"Medium",effort:"S",due:"2026-03-28",notes:"",created:"2026-03-20",recurrence:"weekly",recurrenceEnd:null },
-];
+const AREA_SWATCHES = ["#FF2E93", "#00E5FF", "#3DFFB8", "#FFB020", "#9B6DFF", "#FF6B4A", "#4ECDC4", "#F670C7"];
 
 // ============================================================
-// AI
+// DATA LAYER
 // ============================================================
-async function aiProcess(raw, projs) {
-  const apiKey = localStorage.getItem("pcc-api-key");
-  if (!apiKey) { alert("Set your Anthropic API key in Settings first"); return null; }
-  const projCtx = projs.filter(p=>p.status!=="Complete").map(p=>`"${p.name}" (id:${p.id}, area:${AREAS.find(a=>a.id===p.area)?.name})`).join(", ");
-  const areaCtx = AREAS.map(a=>`${a.name}(id:${a.id}): ${a.keywords.join(",")}`).join("; ");
+function loadData() {
   try {
-    const r = await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,messages:[{role:"user",content:`Extract tasks from meeting notes for a production planner at Dulux Group Rocklea. Areas: ${areaCtx}. Active projects: ${projCtx}. Today is ${new Date().toISOString().slice(0,10)}. Return ONLY JSON array: [{"name":"clean name","area":"area-id","priority":"Critical|High|Medium|Low","effort":"S|M|L|XL","projectId":"id or null","due":"YYYY-MM-DD or null","type":"task|note","original":"raw text"}]. Notes:\n${raw}`}]})});
-    const d = await r.json();
-    return JSON.parse((d.content?.[0]?.text||"[]").replace(/```json|```/g,"").trim());
-  } catch(e) { console.error(e); return null; }
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  return { notes: [], tasks: [], projects: [], areas: DEFAULT_AREAS, digests: [], proposals: [] };
 }
 
+function saveData(data) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(e) {}
+}
 
-async function aiSummarise(projects, tasks) {
-  const apiKey = localStorage.getItem("pcc-api-key");
+// ============================================================
+// AI LAYER
+// ============================================================
+async function aiParseCapture(rawText, areas, projects, recentNotes) {
+  const apiKey = localStorage.getItem(API_KEY_KEY);
   if (!apiKey) return null;
   const today = new Date().toISOString().slice(0, 10);
-  const pData = projects.map(p => "[" + p.status + "] " + p.name + " (" + p.priority + ", due:" + (p.due||"none") + ", area:" + (AREAS.find(a=>a.id===p.area)||{}).name + ")").join("\n");
-  const tData = tasks.map(t => { const proj = projects.find(p=>p.id===t.projectId); return "[" + t.status + "] " + t.name + " (" + t.priority + ", due:" + (t.due||"none") + ", project:" + (proj?proj.name:"none") + ")"; }).join("\n");
+  const areaCtx = areas.map(a => `${a.name}(id:${a.id}): keywords=[${a.keywords.join(",")}]`).join("; ");
+  const projCtx = projects.filter(p => p.status !== "Complete").map(p => `"${p.name}" (id:${p.id}, area:${p.areaId})`).join(", ");
+  const recentCtx = (recentNotes || []).slice(0, 5).map(n => n.rawText.slice(0, 100)).join("\n");
+
   try {
-    const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-dangerous-direct-browser-access": "true" }, body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1500, messages: [{ role: "user", content: "You are a planning assistant for a production planner at Dulux Group Rocklea. Today is " + today + ". Analyse their work and provide a morning briefing. Be direct and actionable.\n\nPROJECTS:\n" + pData + "\n\nTASKS:\n" + tData + "\n\nReturn ONLY valid JSON (no markdown, no backticks):\n{\n\"greeting\": \"short motivational one-liner\",\n\"critical\": [\"critical/urgent items\"],\n\"overdue\": [\"overdue items with days overdue\"],\n\"today_focus\": [\"3-5 focus items for today\"],\n\"this_week\": [\"key deliverables this week\"],\n\"blockers\": [\"blocked items\"],\n\"wins\": [\"recently completed items\"],\n\"risk_areas\": [\"areas falling behind\"],\n\"recommendation\": \"one paragraph strategic recommendation\"\n}" }] }) });
-    const d = await r.json();
-    return JSON.parse((d.content?.[0]?.text || "{}").replace(/```json|```/g, "").trim());
-  } catch (e) { console.error(e); return null; }
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-dangerous-direct-browser-access": "true" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 2000,
+        messages: [{ role: "user", content: `You are a second-brain parser. Extract structured tasks from a mind dump. Be domain-agnostic.
+
+Areas: ${areaCtx}
+Active projects: ${projCtx || "none"}
+Today: ${today}
+Recent notes for context:
+${recentCtx || "none"}
+
+Parse this mind dump and return ONLY valid JSON (no markdown):
+{
+  "tasks": [{"name": "clean task name", "priority": "Critical|High|Medium|Low", "effort": "S|M|L|XL", "areaId": "area-id or null", "projectId": "project-id or null", "due": "YYYY-MM-DD or null", "confidence": 0.0-1.0, "sourceSpan": "original text fragment"}],
+  "thoughts": ["non-actionable observations"],
+  "newProjectProposals": [{"suggestedName": "name", "areaId": "area-id", "reason": "why this should be a project"}],
+  "summary": "one-line summary of this dump"
 }
 
-// ============================================================
-// DONUT CHART
-// ============================================================
-function Donut({ size=120, stroke=14, segments, center, sub }) {
-  const r = (size-stroke)/2, c = 2*Math.PI*r;
-  let offset = 0;
-  return (
-    <div style={{ position:"relative", width:size, height:size }}>
-      <svg width={size} height={size} style={{ transform:"rotate(-90deg)" }}>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#F1F5F9" strokeWidth={stroke} />
-        {segments.map((seg,i) => {
-          const dash = (seg.pct/100)*c;
-          const o = offset; offset += dash;
-          return <circle key={i} cx={size/2} cy={size/2} r={r} fill="none" stroke={seg.color} strokeWidth={stroke} strokeDasharray={`${dash} ${c-dash}`} strokeDashoffset={-o} strokeLinecap="round" style={{ transition:"all 0.6s ease" }} />;
-        })}
-      </svg>
-      <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
-        <div style={{ fontSize: size*0.22, fontWeight:800, color:"#1E293B" }}>{center}</div>
-        {sub && <div style={{ fontSize: size*0.1, color:"#94A3B8", fontWeight:600 }}>{sub}</div>}
-      </div>
-    </div>
-  );
+If a line is clearly a task, confidence should be high (0.8+). If ambiguous, lower.
+Assign areas based on keywords. If no area matches, use null.
+Link to existing projects if the context matches.
+
+Mind dump:
+${rawText}` }]
+      })
+    });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error.message);
+    return JSON.parse((d.content?.[0]?.text || "{}").replace(/```json|```/g, "").trim());
+  } catch (e) { console.error("AI parse error:", e); return null; }
+}
+
+async function aiDigest(tasks, projects, areas) {
+  const apiKey = localStorage.getItem(API_KEY_KEY);
+  if (!apiKey) return null;
+  const today = new Date().toISOString().slice(0, 10);
+
+  const tData = tasks.map(t => {
+    const area = areas.find(a => a.id === t.areaId);
+    const days = daysSince(t.touchedAt || t.updatedAt || t.createdAt);
+    return `[${t.status}] "${t.name}" (priority:${t.priority}, due:${t.due||"none"}, area:${area?.name||"none"}, last_touched:${days}d_ago${isForgotten(t) ? ", FORGOTTEN" : ""})`;
+  }).join("\n");
+
+  const pData = projects.map(p => {
+    const area = areas.find(a => a.id === p.areaId);
+    const days = daysSince(p.touchedAt || p.updatedAt || p.createdAt);
+    return `[${p.status}] "${p.name}" (priority:${p.priority}, due:${p.due||"none"}, area:${area?.name||"none"}, last_touched:${days}d_ago${isForgotten(p) ? ", FORGOTTEN" : ""})`;
+  }).join("\n");
+
+  try {
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-dangerous-direct-browser-access": "true" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1500,
+        messages: [{ role: "user", content: `You are a second-brain daily digest assistant. Today is ${today}. Analyse this person's tasks and projects. Be direct and actionable.
+
+Rules:
+- "forgotten" = status != Complete AND last touched > 7 days ago
+- "incoming" = due within 3 days
+- "stalled" = On Hold for > 14 days
+
+TASKS:
+${tData || "none"}
+
+PROJECTS:
+${pData || "none"}
+
+Return ONLY valid JSON (no markdown):
+{
+  "greeting": "short motivational one-liner",
+  "today_focus": ["3-5 most important things for today"],
+  "forgotten": [{"name": "item name", "days": number_of_days_untouched}],
+  "incoming": [{"name": "item name", "due": "date", "priority": "level"}],
+  "stalled": [{"name": "item name", "days_on_hold": number}],
+  "wins": ["recently completed items"],
+  "risk_areas": ["areas that need attention"],
+  "recommendation": "one paragraph strategic recommendation"
+}` }]
+      })
+    });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error.message);
+    return JSON.parse((d.content?.[0]?.text || "{}").replace(/```json|```/g, "").trim());
+  } catch (e) { console.error("AI digest error:", e); return null; }
+}
+
+async function aiProposeProjects(notes, areas) {
+  const apiKey = localStorage.getItem(API_KEY_KEY);
+  if (!apiKey) return [];
+  const unlinked = notes.filter(n => !n.extractedIds || n.extractedIds.length === 0).slice(-20);
+  if (unlinked.length < 3) return [];
+
+  const noteCtx = unlinked.map(n => `[${n.createdAt}] ${n.rawText.slice(0, 200)}`).join("\n");
+  const areaCtx = areas.map(a => `${a.name}(id:${a.id})`).join(", ");
+
+  try {
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-dangerous-direct-browser-access": "true" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1000,
+        messages: [{ role: "user", content: `You are a second-brain project proposer. Look at these recent unlinked notes and identify recurring themes (3+ notes on similar subject) that should become a Project.
+
+Areas: ${areaCtx}
+Notes:
+${noteCtx}
+
+If you find recurring themes, return JSON array. If not confident, return empty array [].
+[{"suggestedName": "project name", "areaId": "area-id", "evidenceNoteIds": [], "themeSummary": "why this is a project", "confidence": 0.0-1.0}]
+
+Return ONLY valid JSON array (no markdown).` }]
+      })
+    });
+    const d = await r.json();
+    if (d.error) return [];
+    return JSON.parse((d.content?.[0]?.text || "[]").replace(/```json|```/g, "").trim());
+  } catch (e) { console.error("AI propose error:", e); return []; }
 }
 
 // ============================================================
 // COMPONENTS
 // ============================================================
-const Badge = ({children,color,bg,s={}}) => <span style={{display:"inline-flex",alignItems:"center",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:600,color,background:bg,whiteSpace:"nowrap",gap:4,...s}}>{children}</span>;
-const PBar = ({value,color,h=8}) => <div style={{width:"100%",height:h,borderRadius:h,background:"#F1F5F9",overflow:"hidden"}}><div style={{width:`${Math.min(100,Math.max(0,value))}%`,height:"100%",borderRadius:h,background:color,transition:"width 0.5s ease"}}/></div>;
+const Badge = ({ children, color, s = {} }) => (
+  <span style={{ display:"inline-flex", alignItems:"center", padding:"3px 10px", borderRadius:2, fontSize:11, fontWeight:600, color, background:`${color}15`, whiteSpace:"nowrap", gap:4, border:`1px solid ${color}30`, ...s }}>{children}</span>
+);
 
-function Btn({children,onClick,color="#6366F1",outline,small,style={}}) {
-  return <button onClick={onClick} style={{padding:small?"6px 14px":"10px 20px",borderRadius:20,border:outline?`1.5px solid ${color}`:"none",background:outline?"transparent":color,color:outline?color:"#fff",fontSize:small?12:13,fontWeight:600,cursor:"pointer",transition:"all 0.15s",letterSpacing:0.1,...style}}>{children}</button>;
+function Btn({ children, onClick, color = "var(--magenta)", outline, small, disabled, style = {} }) {
+  return <button onClick={onClick} disabled={disabled} style={{ padding: small ? "6px 14px" : "10px 20px", borderRadius: 2, border: outline ? `1.5px solid ${color}` : "1.5px solid transparent", background: outline ? "transparent" : color, color: outline ? color : "#fff", fontSize: small ? 12 : 13, fontWeight: 600, cursor: disabled ? "not-allowed" : "pointer", transition: "all 0.15s", letterSpacing: 0.3, opacity: disabled ? 0.5 : 1, fontFamily: "var(--font-ui)", ...style }}>{children}</button>;
 }
 
-function NavItem({icon,label,active,onClick,badge}) {
-  return <button onClick={onClick} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderRadius:12,border:"none",background:active?"#6366F1":"transparent",color:active?"#fff":"#64748B",fontSize:13,fontWeight:active?700:500,cursor:"pointer",width:"100%",textAlign:"left",transition:"all 0.15s",position:"relative"}}>
-    <span style={{fontSize:16}}>{icon}</span>{label}
-    {badge>0&&<span style={{marginLeft:"auto",background:active?"rgba(255,255,255,0.25)":"#EEF2FF",color:active?"#fff":"#6366F1",fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:10}}>{badge}</span>}
-  </button>;
-}
-
-// ============================================================
-// DETAIL PANEL
-// ============================================================
-function DetailPanel({type,item,onClose,onSave,onDelete,tasks,projects,onSaveTask,onDeleteTask,onAddTask,onOpenTask}) {
-  const [f,setF]=useState({...item});
-  const [adding,setAdding]=useState(false);
-  const [nn,setNn]=useState("");
-  const upd=(k,v)=>{const nf={...f,[k]:v};setF(nf);onSave(nf)};
-  useEffect(()=>{setF({...item})},[item]);
-  const area=AREAS.find(a=>a.id===f.area)||AREAS[4];
-  const linked=type==="project"?(tasks||[]).filter(t=>t.projectId===f.id):[];
-  const done=linked.filter(t=>t.status==="Complete").length;
-  const prog=linked.length?Math.round((done/linked.length)*100):0;
-  const parent=type==="task"&&f.projectId?(projects||[]).find(p=>p.id===f.projectId):null;
-
+function NavItem({ icon, label, active, onClick, badge }) {
   return (
-    <div style={{position:"fixed",right:0,top:0,bottom:0,width:420,maxWidth:"95vw",background:"#fff",boxShadow:"-8px 0 40px rgba(0,0,0,0.08)",zIndex:1000,display:"flex",flexDirection:"column",borderLeft:"1px solid #E2E8F0"}}>
-      <div style={{padding:"20px 24px 16px",background:area.bg,borderBottom:`2px solid ${area.color}20`}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-          <Badge color={area.color} bg={`${area.color}20`}>{area.icon} {area.name}</Badge>
-          <button onClick={onClose} style={{background:"#F1F5F9",border:"none",width:28,height:28,borderRadius:8,cursor:"pointer",fontSize:14,color:"#94A3B8",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
-        </div>
-        <input value={f.name} onChange={e=>upd("name",e.target.value)} style={{width:"100%",fontSize:18,fontWeight:700,border:"none",background:"transparent",color:"#1E293B",outline:"none",padding:0,boxSizing:"border-box",fontFamily:"inherit"}}/>
-        {f.recurrence&&<div style={{fontSize:11,color:"#6366F1",fontWeight:600,marginTop:4}}>🔁 Repeats: {getRecurrenceLabel(f.recurrence)}{f.due&&f.recurrence==="weekly"?" on "+new Date(f.due+"T00:00:00").toLocaleDateString("en-AU",{weekday:"long"})+"s":""}{f.due&&f.recurrence==="monthly"?" on the "+new Date(f.due+"T00:00:00").getDate()+["th","st","nd","rd"][(new Date(f.due+"T00:00:00").getDate()%10>3||[11,12,13].includes(new Date(f.due+"T00:00:00").getDate()%100))?0:new Date(f.due+"T00:00:00").getDate()%10]:""}{f.recurrenceEnd?" until "+new Date(f.recurrenceEnd).toLocaleDateString("en-AU",{day:"numeric",month:"short",year:"numeric"}):""}</div>}
+    <button onClick={onClick} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 16px", borderRadius:2, border:"none", background: active ? "rgba(255,46,147,0.12)" : "transparent", color: active ? "var(--magenta)" : "var(--muted)", fontSize:13, fontWeight: active ? 700 : 500, cursor:"pointer", width:"100%", textAlign:"left", transition:"all 0.15s", position:"relative", fontFamily:"var(--font-ui)", borderLeft: active ? "2px solid var(--magenta)" : "2px solid transparent" }}>
+      <span style={{ fontSize:16 }}>{icon}</span>{label}
+      {badge > 0 && <span style={{ marginLeft:"auto", background: active ? "rgba(255,46,147,0.25)" : "rgba(255,255,255,0.06)", color: active ? "var(--magenta)" : "var(--muted)", fontSize:10, fontWeight:700, padding:"2px 7px", borderRadius:2, fontFamily:"var(--font-mono)" }}>{badge}</span>}
+    </button>
+  );
+}
+
+function Donut({ size = 120, stroke = 14, segments, center, sub }) {
+  const r = (size - stroke) / 2, c = 2 * Math.PI * r;
+  let offset = 0;
+  return (
+    <div style={{ position:"relative", width:size, height:size }}>
+      <svg width={size} height={size} style={{ transform:"rotate(-90deg)" }}>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="var(--elevated)" strokeWidth={stroke} />
+        {segments.map((seg, i) => {
+          const dash = (seg.pct / 100) * c;
+          const o = offset; offset += dash;
+          return <circle key={i} cx={size/2} cy={size/2} r={r} fill="none" stroke={seg.color} strokeWidth={stroke} strokeDasharray={`${dash} ${c - dash}`} strokeDashoffset={-o} strokeLinecap="butt" style={{ transition:"all 0.6s ease" }} />;
+        })}
+      </svg>
+      <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
+        <div style={{ fontSize: size * 0.22, fontWeight:800, color:"var(--text)" }}>{center}</div>
+        {sub && <div style={{ fontSize: size * 0.1, color:"var(--muted)", fontWeight:600 }}>{sub}</div>}
       </div>
-      <div style={{flex:1,overflowY:"auto",padding:"18px 24px"}}>
-        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:16}}>
-          {STATUSES.map(s=><button key={s} onClick={()=>upd("status",s)} style={{padding:"5px 14px",borderRadius:20,border:f.status===s?`2px solid ${SC[s]}`:"1.5px solid #E2E8F0",background:f.status===s?SBG[s]:"#fff",color:f.status===s?SC[s]:"#94A3B8",fontSize:12,fontWeight:600,cursor:"pointer"}}>{s}</button>)}
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
-          <div><div style={{fontSize:11,fontWeight:600,color:"#94A3B8",marginBottom:4}}>Priority</div><div style={{display:"flex",gap:4}}>{PRIORITIES.map(p=><button key={p} onClick={()=>upd("priority",p)} style={{width:28,height:28,borderRadius:8,border:f.priority===p?`2px solid ${PC[p]}`:"1.5px solid #E2E8F0",background:f.priority===p?`${PC[p]}15`:"#fff",cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}} title={p}><span style={{width:10,height:10,borderRadius:5,background:PC[p]}}/></button>)}</div></div>
-          <div><div style={{fontSize:11,fontWeight:600,color:"#94A3B8",marginBottom:4}}>Effort</div><div style={{display:"flex",gap:4}}>{EFFORTS.map(e=><button key={e} onClick={()=>upd("effort",e)} style={{padding:"4px 10px",borderRadius:8,border:f.effort===e?`2px solid ${EC[e]}`:"1.5px solid #E2E8F0",background:f.effort===e?`${EC[e]}15`:"#fff",color:f.effort===e?EC[e]:"#94A3B8",fontSize:11,fontWeight:700,cursor:"pointer"}}>{e}</button>)}</div></div>
-          <div><div style={{fontSize:11,fontWeight:600,color:"#94A3B8",marginBottom:4}}>Area</div><select value={f.area} onChange={e=>upd("area",e.target.value)} style={{width:"100%",padding:"8px 10px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12,background:"#fff",color:"#1E293B"}}>{AREAS.map(a=><option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}</select></div>
-          <div><div style={{fontSize:11,fontWeight:600,color:"#94A3B8",marginBottom:4}}>Due Date</div><input type="date" value={f.due||""} onChange={e=>upd("due",e.target.value)} style={{width:"100%",padding:"8px 10px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12,background:"#fff",color:"#1E293B",boxSizing:"border-box"}}/></div>
-          <div><div style={{fontSize:11,fontWeight:600,color:"#94A3B8",marginBottom:4}}>🔁 Recurrence</div><select value={typeof f.recurrence==="object"?"custom":f.recurrence||"none"} onChange={e=>{const v=e.target.value;if(v==="none")upd("recurrence",null);else if(v==="custom")upd("recurrence",{type:"custom",days:14});else upd("recurrence",v)}} style={{width:"100%",padding:"8px 10px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12,background:"#fff"}}><option value="none">None</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="custom">Custom</option></select></div>
-          {f.recurrence&&typeof f.recurrence==="object"&&f.recurrence.type==="custom"&&<div><div style={{fontSize:11,fontWeight:600,color:"#94A3B8",marginBottom:4}}>Every X days</div><input type="number" value={f.recurrence.days||14} onChange={e=>upd("recurrence",{type:"custom",days:Math.max(1,parseInt(e.target.value)||1)})} min={1} style={{width:"100%",padding:"8px 10px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12,boxSizing:"border-box"}}/></div>}
-          {f.recurrence&&<div><div style={{fontSize:11,fontWeight:600,color:"#94A3B8",marginBottom:4}}>End date (optional)</div><input type="date" value={f.recurrenceEnd||""} onChange={e=>upd("recurrenceEnd",e.target.value||null)} style={{width:"100%",padding:"8px 10px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12,boxSizing:"border-box"}}/></div>}
-          {type==="task"&&<div style={{gridColumn:"1/3"}}><div style={{fontSize:11,fontWeight:600,color:"#94A3B8",marginBottom:4}}>Project</div><select value={f.projectId||""} onChange={e=>upd("projectId",e.target.value||null)} style={{width:"100%",padding:"8px 10px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12,background:"#fff",color:"#1E293B"}}><option value="">— No project —</option>{(projects||[]).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>}
-        </div>
-        {type==="task"&&parent&&<div style={{background:"#F8FAFC",borderRadius:12,padding:"12px 14px",marginBottom:16,border:"1px solid #E2E8F0"}}><div style={{fontSize:10,fontWeight:700,color:"#94A3B8",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Parent Project</div><div style={{fontSize:14,fontWeight:700,color:"#1E293B"}}>{parent.name}</div><div style={{display:"flex",gap:6,marginTop:6}}><Badge color={SC[parent.status]} bg={SBG[parent.status]}>{parent.status}</Badge><span style={{fontSize:11,color:"#94A3B8"}}>Due {parent.due?new Date(parent.due).toLocaleDateString("en-AU",{day:"numeric",month:"short"}):"—"}</span></div></div>}
-        {type==="project"&&linked.length>0&&<div style={{marginBottom:16,display:"flex",alignItems:"center",gap:16}}><Donut size={70} stroke={8} center={`${prog}%`} segments={[{pct:prog,color:area.color}]}/><div><div style={{fontSize:22,fontWeight:800,color:"#1E293B"}}>{done}<span style={{fontSize:14,fontWeight:500,color:"#94A3B8"}}>/{linked.length}</span></div><div style={{fontSize:12,color:"#94A3B8"}}>tasks complete</div></div></div>}
-        <div style={{marginBottom:16}}><div style={{fontSize:11,fontWeight:600,color:"#94A3B8",marginBottom:4}}>Notes</div><textarea value={f.notes||""} onChange={e=>upd("notes",e.target.value)} placeholder="Add notes..." rows={3} style={{width:"100%",padding:"10px 12px",borderRadius:12,border:"1.5px solid #E2E8F0",fontSize:13,resize:"vertical",fontFamily:"inherit",boxSizing:"border-box",lineHeight:1.5,color:"#374151",background:"#F8FAFC"}}/></div>
-        {type==="project"&&<div><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><span style={{fontSize:12,fontWeight:700,color:"#1E293B"}}>Tasks ({linked.length})</span><button onClick={()=>setAdding(true)} style={{background:"#EEF2FF",border:"none",padding:"4px 12px",borderRadius:16,fontSize:11,fontWeight:600,color:"#6366F1",cursor:"pointer"}}>+ Add task</button></div>
-        {adding&&<div style={{display:"flex",gap:6,marginBottom:8}}><input value={nn} onChange={e=>setNn(e.target.value)} placeholder="Task name..." autoFocus onKeyDown={e=>{if(e.key==="Enter"&&nn.trim()){onAddTask({name:nn.trim(),projectId:f.id,area:f.area,status:"Not Started",priority:"Medium",effort:"M",due:"",notes:"",created:new Date().toISOString().slice(0,10),recurrence:null,recurrenceEnd:null});setNn("");setAdding(false)}}} style={{flex:1,padding:"8px 12px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:12}}/><Btn small onClick={()=>{if(nn.trim()){onAddTask({name:nn.trim(),projectId:f.id,area:f.area,status:"Not Started",priority:"Medium",effort:"M",due:"",notes:"",created:new Date().toISOString().slice(0,10),recurrence:null,recurrenceEnd:null});setNn("");setAdding(false)}}}>Add</Btn></div>}
-        {linked.sort((a,b)=>a.status==="Complete"&&b.status!=="Complete"?1:a.status!=="Complete"&&b.status==="Complete"?-1:0).map(t=><div key={t.id} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",borderRadius:10,background:"#F8FAFC",border:"1px solid #E2E8F0",marginBottom:4}}>
-          <button onClick={()=>{const i=STATUSES.indexOf(t.status);onSaveTask({...t,status:STATUSES[(i+1)%STATUSES.length]})}} style={{width:22,height:22,borderRadius:22,border:`2px solid ${SC[t.status]}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,cursor:"pointer",background:t.status==="Complete"?SC[t.status]:"transparent",color:t.status==="Complete"?"#fff":"transparent",transition:"all 0.15s"}}>{t.status==="Complete"?"✓":""}</button>
-          <div style={{flex:1,cursor:"pointer"}} onClick={()=>onOpenTask(t)}><div style={{fontSize:12,fontWeight:600,textDecoration:t.status==="Complete"?"line-through":"none",color:t.status==="Complete"?"#94A3B8":"#1E293B"}}>{t.name}</div></div>
-          <span style={{width:8,height:8,borderRadius:4,background:PC[t.priority],flexShrink:0}} title={t.priority}/>
-          <span style={{fontSize:10,fontWeight:700,color:EC[t.effort]}}>{t.effort}</span>
-          <button onClick={()=>onDeleteTask(t.id)} style={{background:"none",border:"none",fontSize:14,cursor:"pointer",color:"#D1D5DB"}}>×</button>
-        </div>)}</div>}
-      </div>
-      <div style={{padding:"14px 24px",borderTop:"1px solid #E2E8F0",display:"flex",justifyContent:"space-between"}}><Btn small outline color="#F97066" onClick={()=>{onDelete(f.id);onClose()}}>Delete</Btn><Btn small onClick={onClose}>Done</Btn></div>
+    </div>
+  );
+}
+
+function Toast({ message, type = "info", onDismiss }) {
+  const colors = { info: "var(--cyan)", error: "var(--magenta)", success: "var(--success)", warning: "var(--warning)" };
+  useEffect(() => { const t = setTimeout(onDismiss, 4000); return () => clearTimeout(t); }, []);
+  return (
+    <div style={{ position:"fixed", bottom:24, right:80, background:"var(--elevated)", border:`1px solid ${colors[type]}40`, color:"var(--text)", padding:"12px 20px", borderRadius:2, fontSize:13, zIndex:9999, maxWidth:400, boxShadow:`0 0 20px ${colors[type]}20`, fontFamily:"var(--font-mono)", display:"flex", alignItems:"center", gap:10 }}>
+      <span style={{ color:colors[type], fontSize:16 }}>{type === "error" ? "✕" : type === "success" ? "✓" : "●"}</span>
+      {message}
     </div>
   );
 }
 
 // ============================================================
-// AI INBOX
+// CAPTURE MODAL
 // ============================================================
-function AIInbox({projects,onAccept}) {
-  const [raw,setRaw]=useState("");
-  const [parsed,setParsed]=useState([]);
-  const [loading,setLoading]=useState(false);
-  const [accepted,setAccepted]=useState(new Set());
+function CaptureModal({ onCommit, onClose }) {
+  const [text, setText] = useState("");
+  const ref = useRef(null);
+  useEffect(() => { ref.current?.focus(); }, []);
 
-  const run=async()=>{
-    if(!raw.trim())return;setLoading(true);setParsed([]);setAccepted(new Set());
-    const r=await aiProcess(raw,projects);
-    if(r)setParsed(r.map((x,i)=>({...x,_id:`ai${i}_${Date.now()}`})));
-    setLoading(false);
+  const handleKey = (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+      e.preventDefault();
+      if (text.trim()) onCommit(text.trim());
+    }
+    if (e.key === "Escape") onClose();
   };
-  const edit=(id,k,v)=>setParsed(p=>p.map(x=>x._id===id?{...x,[k]:v}:x));
-  const accept=(item)=>{onAccept({name:item.name,area:item.area||"general",priority:item.priority||"Medium",effort:item.effort||"M",projectId:item.projectId||null,due:item.due||"",status:"Not Started",notes:item.original?`Captured: "${item.original}"`:"",created:new Date().toISOString().slice(0,10),recurrence:null,recurrenceEnd:null});setAccepted(p=>new Set([...p,item._id]))};
-  const taskItems=parsed.filter(p=>p.type==="task");
-  const noteItems=parsed.filter(p=>p.type==="note");
 
-  return <div>
-    <div style={{background:"#fff",borderRadius:16,border:"1px solid #E2E8F0",padding:"24px",marginBottom:16,boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
-      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
-        <div style={{width:40,height:40,borderRadius:12,background:"linear-gradient(135deg,#6366F1,#8B5CF6)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>🤖</div>
-        <div><div style={{fontSize:16,fontWeight:700,color:"#1E293B"}}>AI Quick Capture</div><div style={{fontSize:12,color:"#94A3B8"}}>Dump meeting notes → AI extracts structured tasks</div></div>
-      </div>
-      <textarea value={raw} onChange={e=>setRaw(e.target.value)} placeholder="Type your raw notes here...\n\ne.g. chase john on pallet issue TAS urgent\nneed to review Q3 numbers by friday\nben should start running MRP independently" rows={5} style={{width:"100%",padding:"14px 16px",borderRadius:12,border:"1.5px solid #E2E8F0",fontSize:13,fontFamily:"inherit",resize:"vertical",boxSizing:"border-box",lineHeight:1.6,color:"#374151",background:"#F8FAFC"}}/>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:12}}>
-        <span style={{fontSize:11,color:"#CBD5E1"}}>{raw.trim().split("\n").filter(l=>l.trim()).length} lines</span>
-        <div style={{display:"flex",gap:8}}>
-          {raw.trim()&&<Btn small outline color="#94A3B8" onClick={()=>{setRaw("");setParsed([]);setAccepted(new Set())}}>Clear</Btn>}
-          <Btn small onClick={run} style={{background:loading?"#94A3B8":"linear-gradient(135deg,#6366F1,#8B5CF6)"}}>{loading?"Processing...":"🤖 Extract Tasks"}</Btn>
+  return (
+    <div style={{ position:"fixed", inset:0, zIndex:5000, display:"flex", alignItems:"center", justifyContent:"center", backdropFilter:"blur(20px)", background:"rgba(7,7,11,0.85)" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:720, padding:40 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:24 }}>
+          <div style={{ width:8, height:8, borderRadius:4, background:"var(--magenta)", boxShadow:"0 0 12px var(--magenta)" }} />
+          <span style={{ fontFamily:"var(--font-mono)", fontSize:12, color:"var(--muted)" }}>MIND DUMP</span>
+          <span style={{ fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", marginLeft:"auto" }}>⌘↵ to commit</span>
+        </div>
+        <textarea
+          ref={ref}
+          value={text}
+          onChange={e => setText(e.target.value)}
+          onKeyDown={handleKey}
+          placeholder="Dump your thoughts here..."
+          style={{
+            width:"100%", minHeight:200, padding:"20px 24px", background:"var(--surface)", border:"1px solid var(--hairline)",
+            borderRadius:2, color:"var(--text)", fontSize:15, fontFamily:"var(--font-mono)", lineHeight:1.8, resize:"vertical",
+            outline:"none", boxSizing:"border-box"
+          }}
+        />
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:16 }}>
+          <span style={{ fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)" }}>
+            {text.trim().split("\n").filter(l => l.trim()).length} lines
+          </span>
+          <div style={{ display:"flex", gap:8 }}>
+            <Btn small outline color="var(--muted)" onClick={onClose}>Cancel</Btn>
+            <Btn small onClick={() => text.trim() && onCommit(text.trim())} disabled={!text.trim()}>⚡ Commit</Btn>
+          </div>
         </div>
       </div>
     </div>
+  );
+}
 
-    {parsed.length>0&&<div style={{background:"#fff",borderRadius:16,border:"1px solid #E2E8F0",padding:"24px",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-        <div><div style={{fontSize:15,fontWeight:700}}>Extracted Items</div><div style={{fontSize:11,color:"#94A3B8"}}>{taskItems.length} tasks · {noteItems.length} notes</div></div>
-        {taskItems.filter(t=>!accepted.has(t._id)).length>0&&<Btn small onClick={()=>taskItems.filter(t=>!accepted.has(t._id)).forEach(accept)} style={{background:"#47CD89"}}>Accept All ({taskItems.filter(t=>!accepted.has(t._id)).length})</Btn>}
+// ============================================================
+// REVIEW CARD
+// ============================================================
+function ReviewCard({ result, areas, projects, onAccept, onDismiss }) {
+  const [items, setItems] = useState((result.tasks || []).map((t, i) => ({ ...t, _id: uid(), _selected: true })));
+  const edit = (id, k, v) => setItems(prev => prev.map(x => x._id === id ? { ...x, [k]: v } : x));
+  const toggle = (id) => setItems(prev => prev.map(x => x._id === id ? { ...x, _selected: !x._selected } : x));
+
+  return (
+    <div style={{ position:"fixed", bottom:0, left:220, right:60, zIndex:4000, background:"var(--surface)", borderTop:"1px solid var(--magenta)30", padding:"20px 28px", maxHeight:"50vh", overflowY:"auto", boxShadow:"0 -10px 40px rgba(0,0,0,0.5)" }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+        <div>
+          <div style={{ fontSize:14, fontWeight:700, color:"var(--text)" }}>AI Extracted — {items.length} tasks</div>
+          {result.summary && <div style={{ fontSize:12, color:"var(--muted)", fontFamily:"var(--font-mono)", marginTop:2 }}>{result.summary}</div>}
+        </div>
+        <div style={{ display:"flex", gap:8 }}>
+          <Btn small outline color="var(--muted)" onClick={onDismiss}>Discard</Btn>
+          <Btn small color="var(--success)" onClick={() => onAccept(items.filter(i => i._selected))}>Accept Selected ({items.filter(i => i._selected).length})</Btn>
+        </div>
       </div>
-      {taskItems.map(item=>{const area=AREAS.find(a=>a.id===item.area)||AREAS[4];const proj=item.projectId?projects.find(p=>p.id===item.projectId):null;const done=accepted.has(item._id);
-        return <div key={item._id} style={{padding:"14px 16px",borderRadius:12,border:`1.5px solid ${done?"#D1FAE5":"#E2E8F0"}`,background:done?"#F0FDF9":"#F8FAFC",marginBottom:8,opacity:done?0.6:1,transition:"all 0.2s"}}>
-          <div style={{fontSize:10,color:"#94A3B8",fontStyle:"italic",marginBottom:6}}>"{item.original}"</div>
-          <input value={item.name} onChange={e=>edit(item._id,"name",e.target.value)} disabled={done} style={{width:"100%",fontSize:14,fontWeight:700,border:"none",background:"transparent",color:"#1E293B",outline:"none",padding:0,marginBottom:8,boxSizing:"border-box",fontFamily:"inherit"}}/>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
-            <Badge color={area.color} bg={area.bg}>{area.icon} {area.name}</Badge>
-            <Badge color={PC[item.priority]} bg={`${PC[item.priority]}15`}><span style={{width:7,height:7,borderRadius:4,background:PC[item.priority]}}/>{item.priority}</Badge>
-            <Badge color={EC[item.effort]} bg={`${EC[item.effort]}15`}>{item.effort}</Badge>
-            {item.due&&<Badge color="#94A3B8" bg="#F1F5F9">📅 {new Date(item.due).toLocaleDateString("en-AU",{day:"numeric",month:"short"})}</Badge>}
-            {proj&&<Badge color="#6366F1" bg="#EEF2FF">🔗 {proj.name}</Badge>}
+      {items.map(item => {
+        const area = areas.find(a => a.id === item.areaId);
+        const conf = item.confidence || 0;
+        return (
+          <div key={item._id} style={{ display:"flex", alignItems:"flex-start", gap:12, padding:"12px 14px", background:"var(--elevated)", border:`1px solid ${item._selected ? "var(--magenta)30" : "var(--hairline)"}`, borderRadius:2, marginBottom:6, opacity: item._selected ? 1 : 0.5, transition:"all 0.15s" }}>
+            <button onClick={() => toggle(item._id)} style={{ width:20, height:20, borderRadius:2, border:`2px solid ${item._selected ? "var(--magenta)" : "var(--muted)"}`, background: item._selected ? "var(--magenta)" : "transparent", color:"#fff", fontSize:12, cursor:"pointer", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", marginTop:2 }}>{item._selected ? "✓" : ""}</button>
+            <div style={{ flex:1 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
+                <input value={item.name} onChange={e => edit(item._id, "name", e.target.value)} style={{ flex:1, fontSize:13, fontWeight:600, background:"transparent", border:"none", color:"var(--text)", outline:"none", fontFamily:"var(--font-ui)" }} />
+                <div style={{ width:8, height:8, borderRadius:4, background: conf >= 0.8 ? "var(--success)" : conf >= 0.6 ? "var(--warning)" : "var(--magenta)", boxShadow: conf < 0.6 ? "0 0 8px var(--magenta)" : "none" }} title={`Confidence: ${Math.round(conf * 100)}%`} />
+              </div>
+              {item.sourceSpan && <div style={{ fontSize:11, color:"var(--muted)", fontFamily:"var(--font-mono)", marginBottom:6, fontStyle:"italic" }}>"{item.sourceSpan}"</div>}
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                {area && <Badge color={area.color}>{area.icon} {area.name}</Badge>}
+                <Badge color={PC[item.priority]}>{item.priority}</Badge>
+                <Badge color={EC[item.effort || "M"]}>{item.effort || "M"}</Badge>
+                {item.due && <Badge color="var(--muted)">📅 {fmt(item.due)}</Badge>}
+              </div>
+            </div>
           </div>
-          {!done&&<div style={{display:"flex",gap:4,alignItems:"center"}}>
-            <select value={item.area} onChange={e=>edit(item._id,"area",e.target.value)} style={{padding:"4px 8px",borderRadius:8,border:"1px solid #E2E8F0",fontSize:10}}>{AREAS.map(a=><option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}</select>
-            <select value={item.priority} onChange={e=>edit(item._id,"priority",e.target.value)} style={{padding:"4px 8px",borderRadius:8,border:"1px solid #E2E8F0",fontSize:10}}>{PRIORITIES.map(p=><option key={p} value={p}>{p}</option>)}</select>
-            <select value={item.effort} onChange={e=>edit(item._id,"effort",e.target.value)} style={{padding:"4px 8px",borderRadius:8,border:"1px solid #E2E8F0",fontSize:10}}>{EFFORTS.map(e=><option key={e} value={e}>{e}</option>)}</select>
-            <select value={item.projectId||""} onChange={e=>edit(item._id,"projectId",e.target.value||null)} style={{padding:"4px 8px",borderRadius:8,border:"1px solid #E2E8F0",fontSize:10,maxWidth:130}}><option value="">No project</option>{projects.filter(p=>p.status!=="Complete").map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>
-            <div style={{flex:1}}/>
-            <Btn small onClick={()=>accept(item)} style={{background:"#47CD89",borderRadius:16,padding:"4px 14px",fontSize:11}}>✓ Accept</Btn>
-          </div>}
-          {done&&<div style={{fontSize:11,fontWeight:600,color:"#47CD89"}}>✓ Added to tasks</div>}
-        </div>})}
-      {noteItems.length>0&&<div style={{marginTop:12}}><div style={{fontSize:11,fontWeight:700,color:"#94A3B8",marginBottom:6}}>NOTES</div>{noteItems.map(n=><div key={n._id} style={{padding:"8px 12px",borderRadius:10,background:"#F8FAFC",border:"1px solid #E2E8F0",marginBottom:4,fontSize:12,color:"#64748B"}}>💭 {n.name||n.original}</div>)}</div>}
-    </div>}
+        );
+      })}
+      {(result.thoughts || []).length > 0 && (
+        <div style={{ marginTop:12 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", fontFamily:"var(--font-mono)", marginBottom:6 }}>THOUGHTS</div>
+          {result.thoughts.map((t, i) => <div key={i} style={{ padding:"8px 12px", background:"var(--elevated)", border:"1px solid var(--hairline)", borderRadius:2, marginBottom:4, fontSize:12, color:"var(--muted)", fontFamily:"var(--font-mono)" }}>💭 {t}</div>)}
+        </div>
+      )}
+    </div>
+  );
+}
 
-    {parsed.length===0&&!loading&&<div style={{background:"#fff",borderRadius:16,border:"1.5px dashed #D1D5DB",padding:"40px 24px",textAlign:"center"}}><div style={{fontSize:36,marginBottom:8}}>📝</div><div style={{fontSize:15,fontWeight:700,color:"#374151",marginBottom:4}}>Your inbox is empty</div><div style={{fontSize:12,color:"#94A3B8",lineHeight:1.6}}>Type meeting notes above and click Extract Tasks.<br/>AI will parse them into structured, actionable items.</div></div>}
-  </div>;
+// ============================================================
+// TIMELINE SPINE
+// ============================================================
+function TimelineSpine({ notes, onSelect }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const todayNotes = notes.filter(n => n.createdAt && n.createdAt.slice(0, 10) === today).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  return (
+    <div style={{ position:"fixed", right:0, top:0, bottom:0, width:60, background:"var(--surface)", borderLeft:"1px solid var(--hairline)", zIndex:100, display:"flex", flexDirection:"column", alignItems:"center", paddingTop:20, overflowY:"auto" }}>
+      <div style={{ fontFamily:"var(--font-mono)", fontSize:9, color:"var(--muted)", marginBottom:12, transform:"rotate(-90deg)", whiteSpace:"nowrap", transformOrigin:"center center" }}>TODAY</div>
+      <div style={{ width:1, height:12, background:"var(--hairline)", marginBottom:8 }} />
+      {todayNotes.map((n, i) => {
+        const mins = Math.floor((Date.now() - new Date(n.createdAt).getTime()) / 60000);
+        const glow = Math.max(0.3, 1 - mins / 480);
+        return (
+          <div key={n.id} onClick={() => onSelect(n)} style={{ cursor:"pointer", marginBottom:12, position:"relative", display:"flex", alignItems:"center", justifyContent:"center" }} title={n.rawText.slice(0, 80)}>
+            <div style={{ width: 8 + glow * 6, height: 8 + glow * 6, borderRadius:"50%", background:"var(--magenta)", opacity: glow, boxShadow:`0 0 ${glow * 12}px var(--magenta)`, transition:"all 0.3s" }} />
+          </div>
+        );
+      })}
+      {todayNotes.length === 0 && <div style={{ fontFamily:"var(--font-mono)", fontSize:9, color:"var(--muted)", textAlign:"center", padding:"0 4px", marginTop:20, opacity:0.5 }}>no captures yet</div>}
+    </div>
+  );
+}
+
+// ============================================================
+// DETAIL PANEL
+// ============================================================
+function DetailPanel({ type, item, areas, onClose, onSave, onDelete, tasks, projects, onSaveTask, onDeleteTask, onAddTask, onOpenTask }) {
+  const [f, setF] = useState({ ...item });
+  const upd = (k, v) => { const nf = touchNow({ ...f, [k]: v }); setF(nf); onSave(nf); };
+  useEffect(() => { setF({ ...item }); }, [item]);
+  const area = areas.find(a => a.id === (f.areaId || f.area)) || areas[0];
+  const linked = type === "project" ? (tasks || []).filter(t => t.projectId === f.id) : [];
+  const done = linked.filter(t => t.status === "Complete").length;
+  const prog = linked.length ? Math.round((done / linked.length) * 100) : 0;
+  const parent = type === "task" && f.projectId ? (projects || []).find(p => p.id === f.projectId) : null;
+  const [adding, setAdding] = useState(false);
+  const [nn, setNn] = useState("");
+
+  return (
+    <div style={{ position:"fixed", right:60, top:0, bottom:0, width:420, maxWidth:"90vw", background:"var(--surface)", boxShadow:"-8px 0 40px rgba(0,0,0,0.3)", zIndex:1000, display:"flex", flexDirection:"column", borderLeft:"1px solid var(--hairline)" }}>
+      <div style={{ padding:"20px 24px 16px", borderBottom:`1px solid ${area.color}30` }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+          <Badge color={area.color}>{area.icon} {area.name}</Badge>
+          <button onClick={onClose} style={{ background:"var(--elevated)", border:"1px solid var(--hairline)", width:28, height:28, borderRadius:2, cursor:"pointer", fontSize:14, color:"var(--muted)", display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+        </div>
+        <input value={f.name} onChange={e => upd("name", e.target.value)} style={{ width:"100%", fontSize:18, fontWeight:700, border:"none", background:"transparent", color:"var(--text)", outline:"none", padding:0, fontFamily:"var(--font-ui)" }} />
+        {f.sourceNoteId && <div style={{ fontSize:11, color:"var(--cyan)", fontFamily:"var(--font-mono)", marginTop:4, cursor:"pointer" }}>→ extracted from note</div>}
+      </div>
+      <div style={{ flex:1, overflowY:"auto", padding:"18px 24px" }}>
+        <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:16 }}>
+          {STATUSES.map(s => <button key={s} onClick={() => upd("status", s)} style={{ padding:"5px 14px", borderRadius:2, border: f.status === s ? `2px solid ${SC[s]}` : "1px solid var(--hairline)", background: f.status === s ? `${SC[s]}15` : "transparent", color: f.status === s ? SC[s] : "var(--muted)", fontSize:12, fontWeight:600, cursor:"pointer" }}>{s}</button>)}
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
+          <div><div style={{ fontSize:11, fontWeight:600, color:"var(--muted)", marginBottom:4 }}>Priority</div><div style={{ display:"flex", gap:4 }}>{PRIORITIES.map(p => <button key={p} onClick={() => upd("priority", p)} style={{ width:28, height:28, borderRadius:2, border: f.priority === p ? `2px solid ${PC[p]}` : "1px solid var(--hairline)", background: f.priority === p ? `${PC[p]}15` : "transparent", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }} title={p}><span style={{ width:10, height:10, borderRadius:5, background:PC[p] }} /></button>)}</div></div>
+          <div><div style={{ fontSize:11, fontWeight:600, color:"var(--muted)", marginBottom:4 }}>Effort</div><div style={{ display:"flex", gap:4 }}>{EFFORTS.map(e => <button key={e} onClick={() => upd("effort", e)} style={{ padding:"4px 10px", borderRadius:2, border: f.effort === e ? `2px solid ${EC[e]}` : "1px solid var(--hairline)", background: f.effort === e ? `${EC[e]}15` : "transparent", color: f.effort === e ? EC[e] : "var(--muted)", fontSize:11, fontWeight:700, cursor:"pointer" }}>{e}</button>)}</div></div>
+          <div><div style={{ fontSize:11, fontWeight:600, color:"var(--muted)", marginBottom:4 }}>Area</div><select value={f.areaId || ""} onChange={e => upd("areaId", e.target.value)} style={{ width:"100%", padding:"8px 10px", borderRadius:2, border:"1px solid var(--hairline)", fontSize:12, background:"var(--elevated)", color:"var(--text)" }}>{areas.map(a => <option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}</select></div>
+          <div><div style={{ fontSize:11, fontWeight:600, color:"var(--muted)", marginBottom:4 }}>Due Date</div><input type="date" value={f.due || ""} onChange={e => upd("due", e.target.value)} style={{ width:"100%", padding:"8px 10px", borderRadius:2, border:"1px solid var(--hairline)", fontSize:12, background:"var(--elevated)", color:"var(--text)", boxSizing:"border-box" }} /></div>
+          <div><div style={{ fontSize:11, fontWeight:600, color:"var(--muted)", marginBottom:4 }}>Recurrence</div><select value={typeof f.recurrence === "object" ? "custom" : f.recurrence || "none"} onChange={e => { const v = e.target.value; if (v === "none") upd("recurrence", null); else if (v === "custom") upd("recurrence", { type:"custom", days:14 }); else upd("recurrence", v); }} style={{ width:"100%", padding:"8px 10px", borderRadius:2, border:"1px solid var(--hairline)", fontSize:12, background:"var(--elevated)", color:"var(--text)" }}><option value="none">None</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="custom">Custom</option></select></div>
+          {f.recurrence && typeof f.recurrence === "object" && f.recurrence.type === "custom" && <div><div style={{ fontSize:11, fontWeight:600, color:"var(--muted)", marginBottom:4 }}>Every X days</div><input type="number" value={f.recurrence.days || 14} onChange={e => upd("recurrence", { type:"custom", days:Math.max(1, parseInt(e.target.value) || 1) })} min={1} style={{ width:"100%", padding:"8px 10px", borderRadius:2, border:"1px solid var(--hairline)", fontSize:12, boxSizing:"border-box", background:"var(--elevated)", color:"var(--text)" }} /></div>}
+          {type === "task" && <div style={{ gridColumn:"1/3" }}><div style={{ fontSize:11, fontWeight:600, color:"var(--muted)", marginBottom:4 }}>Project</div><select value={f.projectId || ""} onChange={e => upd("projectId", e.target.value || null)} style={{ width:"100%", padding:"8px 10px", borderRadius:2, border:"1px solid var(--hairline)", fontSize:12, background:"var(--elevated)", color:"var(--text)" }}><option value="">— No project —</option>{(projects || []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>}
+        </div>
+        {type === "task" && parent && <div style={{ background:"var(--elevated)", borderRadius:2, padding:"12px 14px", marginBottom:16, border:"1px solid var(--hairline)" }}><div style={{ fontSize:10, fontWeight:700, color:"var(--muted)", textTransform:"uppercase", letterSpacing:0.5, marginBottom:4, fontFamily:"var(--font-mono)" }}>PARENT PROJECT</div><div style={{ fontSize:14, fontWeight:700 }}>{parent.name}</div><div style={{ display:"flex", gap:6, marginTop:6 }}><Badge color={SC[parent.status]}>{parent.status}</Badge></div></div>}
+        {type === "project" && linked.length > 0 && <div style={{ marginBottom:16, display:"flex", alignItems:"center", gap:16 }}><Donut size={70} stroke={8} center={`${prog}%`} segments={[{ pct:prog, color:area.color }]} /><div><div style={{ fontSize:22, fontWeight:800 }}>{done}<span style={{ fontSize:14, fontWeight:500, color:"var(--muted)" }}>/{linked.length}</span></div><div style={{ fontSize:12, color:"var(--muted)" }}>tasks complete</div></div></div>}
+        <div style={{ marginBottom:16 }}><div style={{ fontSize:11, fontWeight:600, color:"var(--muted)", marginBottom:4 }}>Notes</div><textarea value={f.notes || ""} onChange={e => upd("notes", e.target.value)} placeholder="Add notes..." rows={3} style={{ width:"100%", padding:"10px 12px", borderRadius:2, border:"1px solid var(--hairline)", fontSize:13, resize:"vertical", fontFamily:"var(--font-mono)", boxSizing:"border-box", lineHeight:1.5, color:"var(--text)", background:"var(--elevated)" }} /></div>
+        {type === "project" && <div><div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}><span style={{ fontSize:12, fontWeight:700 }}>Tasks ({linked.length})</span><button onClick={() => setAdding(true)} style={{ background:"rgba(255,46,147,0.1)", border:"1px solid var(--magenta)30", padding:"4px 12px", borderRadius:2, fontSize:11, fontWeight:600, color:"var(--magenta)", cursor:"pointer" }}>+ Add task</button></div>
+          {adding && <div style={{ display:"flex", gap:6, marginBottom:8 }}><input value={nn} onChange={e => setNn(e.target.value)} placeholder="Task name..." autoFocus onKeyDown={e => { if (e.key === "Enter" && nn.trim()) { onAddTask({ name:nn.trim(), projectId:f.id, areaId:f.areaId, status:"Not Started", priority:"Medium", effort:"M", due:"", notes:"", createdAt:now(), updatedAt:now(), touchedAt:now(), recurrence:null }); setNn(""); setAdding(false); } }} style={{ flex:1, padding:"8px 12px", borderRadius:2, border:"1px solid var(--hairline)", fontSize:12, background:"var(--elevated)", color:"var(--text)" }} /><Btn small onClick={() => { if (nn.trim()) { onAddTask({ name:nn.trim(), projectId:f.id, areaId:f.areaId, status:"Not Started", priority:"Medium", effort:"M", due:"", notes:"", createdAt:now(), updatedAt:now(), touchedAt:now(), recurrence:null }); setNn(""); setAdding(false); } }}>Add</Btn></div>}
+          {linked.sort((a, b) => a.status === "Complete" ? 1 : b.status === "Complete" ? -1 : 0).map(t => <div key={t.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 12px", borderRadius:2, background:"var(--elevated)", border:"1px solid var(--hairline)", marginBottom:4 }}>
+            <button onClick={() => { const i = STATUSES.indexOf(t.status); onSaveTask(touchNow({ ...t, status: STATUSES[(i + 1) % STATUSES.length] })); }} style={{ width:22, height:22, borderRadius:2, border:`2px solid ${SC[t.status]}`, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, cursor:"pointer", background: t.status === "Complete" ? SC[t.status] : "transparent", color: t.status === "Complete" ? "#000" : "transparent", transition:"all 0.15s" }}>{t.status === "Complete" ? "✓" : ""}</button>
+            <div style={{ flex:1, cursor:"pointer" }} onClick={() => onOpenTask(t)}><div style={{ fontSize:12, fontWeight:600, textDecoration: t.status === "Complete" ? "line-through" : "none", color: t.status === "Complete" ? "var(--muted)" : "var(--text)" }}>{t.name}</div></div>
+            <span style={{ width:8, height:8, borderRadius:4, background:PC[t.priority] }} title={t.priority} />
+          </div>)}
+        </div>}
+      </div>
+      <div style={{ padding:"14px 24px", borderTop:"1px solid var(--hairline)", display:"flex", justifyContent:"space-between" }}><Btn small outline color="var(--magenta)" onClick={() => { onDelete(f.id); onClose(); }}>Delete</Btn><Btn small onClick={onClose}>Done</Btn></div>
+    </div>
+  );
 }
 
 // ============================================================
 // MAIN APP
 // ============================================================
 function App() {
-  const [P,setP]=useState(DEFAULT_PROJECTS);
-  const [T,setT]=useState(DEFAULT_TASKS);
-  const [view,setView]=useState("dashboard");
-  const [af,setAf]=useState("all");
-  const [panel,setPanel]=useState(null);
-  const [calMonth,setCalMonth]=useState(new Date());
-  const [calDay,setCalDay]=useState(null);
-  const [selP,setSelP]=useState(new Set());
-  const [selT,setSelT]=useState(new Set());
-  const [bulkAction,setBulkAction]=useState(null);
-  const [briefing,setBriefing]=useState(null);
-  const [briefLoading,setBriefLoading]=useState(false);
-  const [dragTask,setDragTask]=useState(null);
-  const [loaded,setLoaded]=useState(false);
+  const [data, setData] = useState(loadData);
+  const { notes, tasks, projects, areas, digests, proposals } = data;
+  const [view, setView] = useState("capture");
+  const [panel, setPanel] = useState(null);
+  const [showCapture, setShowCapture] = useState(false);
+  const [review, setReview] = useState(null);
+  const [toast, setToast] = useState(null);
+  const [calMonth, setCalMonth] = useState(new Date());
+  const [dragTask, setDragTask] = useState(null);
+  const [briefing, setBriefing] = useState(null);
+  const [briefLoading, setBriefLoading] = useState(false);
+  const [searchQ, setSearchQ] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
 
-  useEffect(()=>{
-    try{
-      // Try v6 first
-      let stored=localStorage.getItem(STORAGE_KEY);
-      if(!stored){
-        // Migrate from v5 or v6
-        const prev=localStorage.getItem("pcc-v7")||localStorage.getItem("pcc-v6")||localStorage.getItem("pcc-v5");
-        if(prev){
-          stored=prev;
-          localStorage.setItem(STORAGE_KEY,prev);
-          console.log("Migrated data to pcc-v8");
-        }
-      }
-      if(stored){const d=JSON.parse(stored);if(d.P)setP(d.P);if(d.T)setT(d.T)}
-    }catch(e){console.log("storage load skip")}
-    setLoaded(true);
-    // Auto-generate AI briefing at 6am AEST (UTC+10), cached 24hrs
+  // Persistence
+  useEffect(() => { saveData(data); }, [data]);
+  const update = (key, fn) => setData(prev => ({ ...prev, [key]: typeof fn === "function" ? fn(prev[key]) : fn }));
+
+  // Global ⌘K
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") { e.preventDefault(); setShowCapture(true); }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, []);
+
+  // Load digest cache
+  useEffect(() => {
     try {
-      const cached = localStorage.getItem("pcc-briefing");
+      const cached = localStorage.getItem("synapse-digest");
       if (cached) {
         const cb = JSON.parse(cached);
         setBriefing(cb.data);
-        // Check if we need to refresh (past 6am AEST today and cache is from before 6am)
-        const now = new Date();
-        const aestNow = new Date(now.getTime() + 10 * 60 * 60 * 1000);
-        const aestHour = aestNow.getUTCHours();
-        const cacheTime = new Date(cb.time);
-        const aestCache = new Date(cacheTime.getTime() + 10 * 60 * 60 * 1000);
-        const cacheDateStr = aestCache.toISOString().slice(0, 10);
-        const todayDateStr = aestNow.toISOString().slice(0, 10);
-        const needsRefresh = (todayDateStr !== cacheDateStr && aestHour >= 6) || (!cb.data);
-        if (needsRefresh && localStorage.getItem("pcc-api-key")) {
-          setBriefLoading(true);
-          aiSummarise(
-            stored ? (JSON.parse(stored).P || DEFAULT_PROJECTS) : DEFAULT_PROJECTS,
-            stored ? (JSON.parse(stored).T || DEFAULT_TASKS) : DEFAULT_TASKS
-          ).then(r => { if (r) { setBriefing(r); localStorage.setItem("pcc-briefing", JSON.stringify({ data: r, time: new Date().toISOString() })); } setBriefLoading(false); });
+        const aestNow = new Date(Date.now() + 10 * 3600000);
+        const cacheDate = new Date(new Date(cb.time).getTime() + 10 * 3600000).toISOString().slice(0, 10);
+        const todayDate = aestNow.toISOString().slice(0, 10);
+        if (todayDate !== cacheDate && aestNow.getUTCHours() >= 6 && localStorage.getItem(API_KEY_KEY)) {
+          refreshDigest();
         }
-      } else if (localStorage.getItem("pcc-api-key")) {
-        setBriefLoading(true);
-        aiSummarise(
-          stored ? (JSON.parse(stored).P || DEFAULT_PROJECTS) : DEFAULT_PROJECTS,
-          stored ? (JSON.parse(stored).T || DEFAULT_TASKS) : DEFAULT_TASKS
-        ).then(r => { if (r) { setBriefing(r); localStorage.setItem("pcc-briefing", JSON.stringify({ data: r, time: new Date().toISOString() })); } setBriefLoading(false); });
       }
-    } catch(e) { console.log("briefing skip"); }
-  },[]);
-  const save=useCallback((p,t)=>{try{localStorage.setItem(STORAGE_KEY,JSON.stringify({P:p,T:t}))}catch(e){}},[]);
-  useEffect(()=>{if(loaded)save(P,T)},[P,T,loaded,save]);
+    } catch(e) {}
+  }, []);
 
-  const sP=(p)=>setP(v=>v.map(x=>x.id===p.id?p:x));
-  const dP=(id)=>{setP(v=>v.filter(x=>x.id!==id));setT(v=>v.map(t=>t.projectId===id?{...t,projectId:null}:t));setPanel(null)};
-  const aP=()=>{const n={id:uid(),name:"New Project",area:af!=="all"?af:"general",status:"Not Started",priority:"Medium",effort:"M",due:"",notes:"",created:new Date().toISOString().slice(0,10)};setP(v=>[...v,n]);setPanel({type:"project",item:n})};
-  const sT=(t)=>{
-    setT(v=>{
-      const updated = v.map(x=>x.id===t.id?t:x);
-      // Auto-create next recurring task when completed
-      const old = v.find(x=>x.id===t.id);
-      if(t.status==="Complete" && old && old.status!=="Complete" && t.recurrence) {
+  const refreshDigest = async () => {
+    setBriefLoading(true);
+    const r = await aiDigest(tasks, projects, areas);
+    if (r) { setBriefing(r); localStorage.setItem("synapse-digest", JSON.stringify({ data: r, time: now() })); }
+    setBriefLoading(false);
+  };
+
+  // Capture commit
+  const handleCapture = async (rawText) => {
+    setShowCapture(false);
+    // Persist note FIRST
+    const note = { id: uid(), createdAt: now(), updatedAt: now(), touchedAt: now(), rawText, source: "capture", processed: false, extractedIds: [], areaIds: [] };
+    update("notes", prev => [note, ...prev]);
+    setToast({ message: "Note saved", type: "success" });
+
+    // AI parse
+    setAiLoading(true);
+    const result = await aiParseCapture(rawText, areas, projects, notes.slice(0, 5));
+    setAiLoading(false);
+
+    if (result && result.tasks && result.tasks.length > 0) {
+      setReview(result);
+    } else if (!result) {
+      setToast({ message: "AI unavailable — note saved as raw dump", type: "warning" });
+    } else {
+      setToast({ message: "No tasks extracted — note saved", type: "info" });
+    }
+
+    // Project proposals (background)
+    if (localStorage.getItem(API_KEY_KEY)) {
+      const props = await aiProposeProjects([note, ...notes], areas);
+      if (props && props.length > 0) {
+        update("proposals", prev => [...props.map(p => ({ ...p, id: uid(), status: "pending", createdAt: now() })), ...prev]);
+      }
+    }
+  };
+
+  // Accept reviewed tasks
+  const handleAcceptTasks = (selectedItems) => {
+    const newTasks = selectedItems.map(item => ({
+      id: uid(), name: item.name, projectId: item.projectId || null, areaId: item.areaId || areas[0]?.id,
+      status: "Not Started", priority: item.priority || "Medium", effort: item.effort || "M",
+      due: item.due || null, recurrence: null, notes: "",
+      sourceNoteId: notes[0]?.id || null, createdAt: now(), updatedAt: now(), touchedAt: now(),
+      aiConfidence: item.confidence, aiProposed: true
+    }));
+    update("tasks", prev => [...newTasks, ...prev]);
+    // Update note
+    if (notes[0]) {
+      update("notes", prev => prev.map((n, i) => i === 0 ? { ...n, processed: true, extractedIds: newTasks.map(t => t.id) } : n));
+    }
+    setReview(null);
+    setToast({ message: `${newTasks.length} tasks created`, type: "success" });
+  };
+
+  // CRUD helpers
+  const saveTask = (t) => update("tasks", prev => prev.map(x => x.id === t.id ? t : x));
+  const deleteTask = (id) => { update("tasks", prev => prev.filter(x => x.id !== id)); if (panel?.item?.id === id) setPanel(null); };
+  const addTask = (t) => { const n = { ...t, id: uid() }; update("tasks", prev => [n, ...prev]); return n; };
+  const saveProject = (p) => update("projects", prev => prev.map(x => x.id === p.id ? p : x));
+  const deleteProject = (id) => { update("projects", prev => prev.filter(x => x.id !== id)); update("tasks", prev => prev.map(t => t.projectId === id ? { ...t, projectId: null } : t)); setPanel(null); };
+  const addProject = (p) => { const n = { ...p, id: uid(), createdAt: now(), updatedAt: now(), touchedAt: now() }; update("projects", prev => [n, ...prev]); return n; };
+
+  // Complete task with recurrence
+  const completeTask = (t) => {
+    const updated = touchNow({ ...t, status: "Complete" });
+    update("tasks", prev => {
+      const list = prev.map(x => x.id === t.id ? updated : x);
+      if (t.recurrence && t.status !== "Complete") {
         const nextDue = getNextDue(t.due, t.recurrence);
-        if(nextDue && (!t.recurrenceEnd || nextDue <= t.recurrenceEnd)) {
-          const newTask = {...t, id:uid(), status:"Not Started", due:nextDue, notes:t.notes, created:new Date().toISOString().slice(0,10), recurrenceParent:t.recurrenceParent||t.id};
-          return [...updated, newTask];
+        if (nextDue && (!t.recurrenceEnd || nextDue <= t.recurrenceEnd)) {
+          return [...list, { ...t, id: uid(), status: "Not Started", due: nextDue, createdAt: now(), updatedAt: now(), touchedAt: now() }];
         }
       }
-      return updated;
+      return list;
     });
   };
-  const dT=(id)=>{setT(v=>v.filter(x=>x.id!==id));if(panel?.item?.id===id)setPanel(null)};
-  const aT=(t)=>{const n={...t,id:uid()};setT(v=>[...v,n]);return n};
-  const aNT=()=>{const n={id:uid(),name:"New Task",projectId:null,area:af!=="all"?af:"general",status:"Not Started",priority:"Medium",effort:"M",due:"",notes:"",created:new Date().toISOString().slice(0,10),recurrence:null,recurrenceEnd:null};setT(v=>[...v,n]);setPanel({type:"task",item:n})};
 
-
-  // Bulk actions
-  const bulkDeleteP = () => { if (confirm("Delete " + selP.size + " projects?")) { setP(v => v.filter(x => !selP.has(x.id))); setT(v => v.map(t => selP.has(t.projectId) ? {...t, projectId: null} : t)); setSelP(new Set()); } };
-  const bulkDeleteT = () => { if (confirm("Delete " + selT.size + " tasks?")) { setT(v => v.filter(x => !selT.has(x.id))); setSelT(new Set()); } };
-  const bulkStatusP = (s) => { setP(v => v.map(x => selP.has(x.id) ? {...x, status: s} : x)); setSelP(new Set()); setBulkAction(null); };
-  const bulkStatusT = (s) => { setT(v => v.map(x => selT.has(x.id) ? {...x, status: s} : x)); setSelT(new Set()); setBulkAction(null); };
-  const bulkPriorityP = (p) => { setP(v => v.map(x => selP.has(x.id) ? {...x, priority: p} : x)); setSelP(new Set()); setBulkAction(null); };
-  const bulkPriorityT = (p) => { setT(v => v.map(x => selT.has(x.id) ? {...x, priority: p} : x)); setSelT(new Set()); setBulkAction(null); };
-  const bulkAssignT = (pid) => { setT(v => v.map(x => selT.has(x.id) ? {...x, projectId: pid || null} : x)); setSelT(new Set()); setBulkAction(null); };
-  const toggleSelP = (id) => setSelP(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const toggleSelT = (id) => setSelT(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const selAllP = () => setSelP(new Set(fp.map(p => p.id)));
-  const selAllT = () => setSelT(new Set(ft.map(t => t.id)));
-  const refreshBriefing = async () => { setBriefLoading(true); const r = await aiSummarise(P, T); if (r) { setBriefing(r); localStorage.setItem("pcc-briefing", JSON.stringify({ data: r, time: new Date().toISOString() })); } setBriefLoading(false); };
   const handleCalDrop = (taskId, newDay) => {
     const yr = calMonth.getFullYear(), mn = calMonth.getMonth();
-    const newDate = yr + "-" + String(mn+1).padStart(2,"0") + "-" + String(newDay).padStart(2,"0");
-    setT(v => v.map(x => x.id === taskId ? {...x, due: newDate} : x));
+    const newDate = yr + "-" + String(mn + 1).padStart(2, "0") + "-" + String(newDay).padStart(2, "0");
+    update("tasks", prev => prev.map(x => x.id === taskId ? touchNow({ ...x, due: newDate }) : x));
     setDragTask(null);
   };
 
-  const fp=useMemo(()=>af==="all"?P:P.filter(p=>p.area===af),[P,af]);
-  const ft=useMemo(()=>af==="all"?T:T.filter(t=>t.area===af),[T,af]);
-  const cT=T.filter(t=>t.status==="Complete").length;
-  const ipP=P.filter(p=>p.status==="In Progress").length;
-  const od=P.filter(p=>p.due&&new Date(p.due)<new Date()&&p.status!=="Complete").length;
-  const cr=P.filter(p=>p.priority==="Critical"&&p.status!=="Complete").length;
-  const getA=id=>AREAS.find(a=>a.id===id)||AREAS[4];
+  // Sync panel
+  useEffect(() => {
+    if (panel) {
+      const src = panel.type === "project" ? projects : tasks;
+      const u = src.find(x => x.id === panel.item.id);
+      if (u && JSON.stringify(u) !== JSON.stringify(panel.item)) setPanel({ ...panel, item: u });
+    }
+  }, [projects, tasks]);
 
-  useEffect(()=>{if(panel){const src=panel.type==="project"?P:T;const u=src.find(x=>x.id===panel.item.id);if(u&&JSON.stringify(u)!==JSON.stringify(panel.item))setPanel({...panel,item:u})}},[P,T]);
+  const inboxCount = proposals.filter(p => p.status === "pending").length;
+  const forgottenCount = tasks.filter(t => isForgotten(t)).length;
 
-  const statusPcts=STATUSES.map(s=>({s,count:P.filter(p=>p.status===s).length,pct:P.length?Math.round((P.filter(p=>p.status===s).length/P.length)*100):0}));
-
+  // ============================================================
+  // RENDER
+  // ============================================================
   return (
-    <div style={{fontFamily:"'DM Sans','Segoe UI',sans-serif",background:"#F8FAFC",minHeight:"100vh",color:"#1E293B",display:"flex",height:"100vh",overflow:"hidden"}}>
-      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
-      {panel&&<div onClick={()=>setPanel(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.15)",zIndex:999}}/>}
+    <div style={{ display:"flex", height:"100vh", overflow:"hidden" }}>
+      {panel && <div onClick={() => setPanel(null)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.3)", zIndex:999 }} />}
+      {showCapture && <CaptureModal onCommit={handleCapture} onClose={() => setShowCapture(false)} />}
+      {review && <ReviewCard result={review} areas={areas} projects={projects} onAccept={handleAcceptTasks} onDismiss={() => setReview(null)} />}
+      {toast && <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
 
-      {/* SIDEBAR */}
-      <div style={{width:220,background:"#fff",borderRight:"1px solid #E2E8F0",padding:"20px 12px",display:"flex",flexDirection:"column",flexShrink:0,overflowY:"auto"}}>
-        <div style={{display:"flex",alignItems:"center",gap:10,padding:"0 8px",marginBottom:24}}>
-          <div style={{width:36,height:36,borderRadius:10,background:"linear-gradient(135deg,#6366F1,#8B5CF6)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:16,fontWeight:800}}>⚙️</div>
-          <div><div style={{fontSize:14,fontWeight:800,color:"#1E293B"}}>Command</div><div style={{fontSize:10,color:"#94A3B8",fontWeight:500}}>Rocklea Planning</div></div>
+      {/* NAV SIDEBAR */}
+      <div style={{ width:220, background:"var(--surface)", borderRight:"1px solid var(--hairline)", padding:"20px 12px", display:"flex", flexDirection:"column", flexShrink:0, overflowY:"auto" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10, padding:"0 8px", marginBottom:24 }}>
+          <div style={{ width:36, height:36, borderRadius:2, background:"linear-gradient(135deg, var(--magenta), #9B6DFF)", display:"flex", alignItems:"center", justifyContent:"center", color:"#fff", fontSize:16, fontWeight:800 }}>🧠</div>
+          <div><div style={{ fontSize:14, fontWeight:800 }}>Synapse</div><div style={{ fontSize:10, color:"var(--muted)", fontFamily:"var(--font-mono)" }}>second brain</div></div>
         </div>
-        <div style={{fontSize:10,fontWeight:700,color:"#CBD5E1",textTransform:"uppercase",letterSpacing:1,padding:"0 8px",marginBottom:6}}>Overview</div>
-        <NavItem icon="📊" label="Dashboard" active={view==="dashboard"} onClick={()=>setView("dashboard")}/>
-        <NavItem icon="🤖" label="AI Inbox" active={view==="inbox"} onClick={()=>setView("inbox")} badge={0}/>
-        <div style={{fontSize:10,fontWeight:700,color:"#CBD5E1",textTransform:"uppercase",letterSpacing:1,padding:"0 8px",margin:"16px 0 6px"}}>Manage</div>
-        <NavItem icon="🎯" label="Projects" active={view==="projects"} onClick={()=>setView("projects")} badge={P.length}/>
-        <NavItem icon="📋" label="Tasks" active={view==="tasks"} onClick={()=>setView("tasks")} badge={T.filter(t=>t.status!=="Complete").length}/>
-        <NavItem icon="📌" label="Board" active={view==="board"} onClick={()=>setView("board")}/>
-        <NavItem icon="📆" label="Calendar" active={view==="calendar"} onClick={()=>setView("calendar")}/>
-        <div style={{flex:1}}/>
-        <div style={{fontSize:10,fontWeight:700,color:"#CBD5E1",textTransform:"uppercase",letterSpacing:1,padding:"0 8px",marginBottom:6}}>Areas</div>
-        <button onClick={()=>setAf("all")} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 16px",borderRadius:8,border:"none",background:af==="all"?"#F1F5F9":"transparent",color:af==="all"?"#1E293B":"#94A3B8",fontSize:12,fontWeight:500,cursor:"pointer",width:"100%",textAlign:"left"}}>All areas</button>
-        {AREAS.map(a=><button key={a.id} onClick={()=>setAf(a.id)} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 16px",borderRadius:8,border:"none",background:af===a.id?a.bg:"transparent",color:af===a.id?a.color:"#94A3B8",fontSize:12,fontWeight:af===a.id?600:500,cursor:"pointer",width:"100%",textAlign:"left"}}><span style={{width:8,height:8,borderRadius:4,background:a.color}}/>{a.name}</button>)}
-        <div style={{marginTop:16,borderTop:"1px solid #E2E8F0",paddingTop:12}}>
-          <NavItem icon="⚙️" label="Settings" active={view==="settings"} onClick={()=>setView("settings")}/>
-        </div>
+
+        <button onClick={() => setShowCapture(true)} style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 16px", borderRadius:2, border:"1px solid var(--magenta)40", background:"rgba(255,46,147,0.08)", color:"var(--magenta)", fontSize:13, fontWeight:600, cursor:"pointer", width:"100%", textAlign:"left", marginBottom:16, fontFamily:"var(--font-ui)" }}>
+          <span>⚡</span> Capture <span style={{ marginLeft:"auto", fontSize:10, color:"var(--muted)", fontFamily:"var(--font-mono)" }}>⌘K</span>
+        </button>
+
+        <div style={{ fontSize:10, fontWeight:700, color:"var(--muted)", textTransform:"uppercase", letterSpacing:1, padding:"0 8px", marginBottom:6, fontFamily:"var(--font-mono)" }}>Views</div>
+        <NavItem icon="⚡" label="Capture" active={view === "capture"} onClick={() => setView("capture")} />
+        <NavItem icon="📡" label="Stream" active={view === "stream"} onClick={() => setView("stream")} />
+        <NavItem icon="📝" label="Notes" active={view === "notes"} onClick={() => setView("notes")} badge={notes.length} />
+        <NavItem icon="☑️" label="Tasks" active={view === "tasks"} onClick={() => setView("tasks")} badge={tasks.filter(t => t.status !== "Complete").length} />
+        <NavItem icon="📂" label="Projects" active={view === "projects"} onClick={() => setView("projects")} badge={projects.length} />
+        <NavItem icon="📌" label="Board" active={view === "board"} onClick={() => setView("board")} />
+        <NavItem icon="📆" label="Calendar" active={view === "calendar"} onClick={() => setView("calendar")} />
+
+        <div style={{ fontSize:10, fontWeight:700, color:"var(--muted)", textTransform:"uppercase", letterSpacing:1, padding:"0 8px", margin:"16px 0 6px", fontFamily:"var(--font-mono)" }}>Intelligence</div>
+        <NavItem icon="📊" label="Dashboard" active={view === "dashboard"} onClick={() => setView("dashboard")} />
+        <NavItem icon="🔮" label="Digest" active={view === "digest"} onClick={() => setView("digest")} badge={forgottenCount} />
+        <NavItem icon="📥" label="Inbox" active={view === "inbox"} onClick={() => setView("inbox")} badge={inboxCount} />
+
+        <div style={{ flex:1 }} />
+        <NavItem icon="⚙️" label="Settings" active={view === "settings"} onClick={() => setView("settings")} />
       </div>
 
-      {/* MAIN */}
-      <div style={{flex:1,padding:"24px 28px",overflowY:"auto"}}>
+      {/* MAIN CONTENT */}
+      <div style={{ flex:1, padding:"24px 28px", overflowY:"auto", marginRight:60 }}>
 
-
-        {/* SETTINGS */}
-        {view==="settings"&&<>
-          <div style={{fontSize:22,fontWeight:800,marginBottom:4}}>Settings</div>
-          <div style={{fontSize:13,color:"#94A3B8",marginBottom:20}}>Configure your Command Centre</div>
-          <div style={{background:"#fff",borderRadius:16,border:"1px solid #E2E8F0",padding:"24px",maxWidth:500,boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
-            <div style={{fontSize:14,fontWeight:700,marginBottom:4}}>🤖 AI Inbox — API Key</div>
-            <div style={{fontSize:12,color:"#94A3B8",marginBottom:12}}>Get your key from <a href="https://console.anthropic.com/settings/keys" target="_blank" style={{color:"#6366F1"}}>console.anthropic.com</a></div>
-            <input type="password" defaultValue={localStorage.getItem("pcc-api-key")||""} onChange={e=>{localStorage.setItem("pcc-api-key",e.target.value)}} placeholder="sk-ant-api03-..." style={{width:"100%",padding:"10px 14px",borderRadius:10,border:"1.5px solid #E2E8F0",fontSize:13,boxSizing:"border-box",fontFamily:"monospace"}}/>
-            <div style={{fontSize:10,color:"#CBD5E1",marginTop:6}}>Stored in your browser only</div>
+        {/* ========== CAPTURE VIEW ========== */}
+        {view === "capture" && <>
+          <div style={{ marginBottom:8 }}>
+            <h1 style={{ fontSize:28, fontWeight:800, textShadow:"0 0 40px rgba(255,46,147,0.15)" }}>Capture</h1>
+            <p style={{ fontSize:13, color:"var(--muted)", fontFamily:"var(--font-mono)" }}>⌘K to dump from anywhere. Your thoughts are saved instantly.</p>
           </div>
-          <div style={{background:"#fff",borderRadius:16,border:"1px solid #E2E8F0",padding:"24px",maxWidth:500,marginTop:12,boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
-            <div style={{fontSize:14,fontWeight:700,marginBottom:12}}>💾 Data</div>
-            <div style={{display:"flex",gap:8}}>
-              <Btn small outline color="#6366F1" onClick={()=>{const d=JSON.stringify({P,T},null,2);const b=new Blob([d],{type:"application/json"});const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download="command-centre-backup.json";a.click()}}>Export Backup</Btn>
-              <Btn small outline color="#F97066" onClick={()=>{if(confirm("Reset all data?")){localStorage.removeItem(STORAGE_KEY);location.reload()}}}>Reset Data</Btn>
+          <div onClick={() => setShowCapture(true)} style={{ cursor:"pointer", background:"var(--surface)", border:"1px dashed var(--magenta)40", borderRadius:2, padding:"60px 40px", textAlign:"center", marginTop:24, transition:"all 0.2s" }}>
+            <div style={{ fontSize:48, marginBottom:16 }}>⚡</div>
+            <div style={{ fontSize:18, fontWeight:700, color:"var(--text)", marginBottom:8 }}>Start a mind dump</div>
+            <div style={{ fontSize:13, color:"var(--muted)", fontFamily:"var(--font-mono)" }}>Click here or press ⌘K to capture</div>
+            {aiLoading && <div style={{ marginTop:16, color:"var(--cyan)", fontFamily:"var(--font-mono)", fontSize:12 }}>● AI processing...</div>}
+          </div>
+          {notes.length > 0 && <div style={{ marginTop:32 }}>
+            <div style={{ fontSize:12, fontWeight:700, color:"var(--muted)", fontFamily:"var(--font-mono)", marginBottom:12 }}>RECENT CAPTURES</div>
+            {notes.slice(0, 5).map(n => (
+              <div key={n.id} style={{ padding:"14px 16px", background:"var(--surface)", border:"1px solid var(--hairline)", borderRadius:2, marginBottom:6 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+                  <span style={{ fontFamily:"var(--font-mono)", fontSize:11, color:"var(--cyan)" }}>{fmtFull(n.createdAt)}</span>
+                  {n.extractedIds.length > 0 && <Badge color="var(--success)">→ {n.extractedIds.length} tasks</Badge>}
+                </div>
+                <div style={{ fontSize:13, color:"var(--text)", lineHeight:1.6, fontFamily:"var(--font-mono)", whiteSpace:"pre-wrap" }}>{n.rawText.slice(0, 200)}{n.rawText.length > 200 ? "..." : ""}</div>
+              </div>
+            ))}
+          </div>}
+        </>}
+
+        {/* ========== STREAM VIEW ========== */}
+        {view === "stream" && <>
+          <h1 style={{ fontSize:28, fontWeight:800, marginBottom:4, textShadow:"0 0 40px rgba(255,46,147,0.15)" }}>Stream</h1>
+          <p style={{ fontSize:13, color:"var(--muted)", fontFamily:"var(--font-mono)", marginBottom:24 }}>Everything, reverse-chronological</p>
+          {(() => {
+            const allItems = [
+              ...notes.map(n => ({ ...n, _type: "note", _ts: n.createdAt })),
+              ...tasks.map(t => ({ ...t, _type: "task", _ts: t.createdAt })),
+              ...projects.map(p => ({ ...p, _type: "project", _ts: p.createdAt })),
+            ].sort((a, b) => new Date(b._ts) - new Date(a._ts));
+
+            const grouped = {};
+            allItems.forEach(item => {
+              const day = item._ts ? item._ts.slice(0, 10) : "unknown";
+              if (!grouped[day]) grouped[day] = [];
+              grouped[day].push(item);
+            });
+
+            return Object.entries(grouped).map(([day, items]) => (
+              <div key={day} style={{ marginBottom:24 }}>
+                <div style={{ fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", marginBottom:8, padding:"4px 0", borderBottom:"1px solid var(--hairline)" }}>{day === new Date().toISOString().slice(0,10) ? "TODAY" : day}</div>
+                {items.map(item => (
+                  <div key={item.id} style={{ display:"flex", gap:12, padding:"10px 14px", background:"var(--surface)", border:"1px solid var(--hairline)", borderRadius:2, marginBottom:4, cursor: item._type !== "note" ? "pointer" : "default" }} onClick={() => { if (item._type === "task") setPanel({ type:"task", item }); if (item._type === "project") setPanel({ type:"project", item }); }}>
+                    <div style={{ fontFamily:"var(--font-mono)", fontSize:11, color:"var(--cyan)", minWidth:45 }}>{fmtTime(item._ts)}</div>
+                    <div style={{ width:6, height:6, borderRadius:3, background: item._type === "note" ? "var(--muted)" : item._type === "task" ? "var(--cyan)" : "var(--magenta)", marginTop:5, flexShrink:0 }} />
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:13, color:"var(--text)", fontWeight: item._type === "note" ? 400 : 600 }}>
+                        {item._type === "note" ? item.rawText.slice(0, 120) : item.name}
+                      </div>
+                      <div style={{ display:"flex", gap:6, marginTop:4 }}>
+                        <span style={{ fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)" }}>{item._type}</span>
+                        {item.status && <Badge color={SC[item.status]} s={{ fontSize:10, padding:"1px 6px" }}>{item.status}</Badge>}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ));
+          })()}
+          {notes.length === 0 && tasks.length === 0 && <div style={{ textAlign:"center", padding:"60px 0", color:"var(--muted)" }}><div style={{ fontSize:36, marginBottom:8 }}>📡</div>Stream is empty. Hit ⌘K to start capturing.</div>}
+        </>}
+
+        {/* ========== NOTES VIEW ========== */}
+        {view === "notes" && <>
+          <h1 style={{ fontSize:28, fontWeight:800, marginBottom:4, textShadow:"0 0 40px rgba(255,46,147,0.15)" }}>Notes</h1>
+          <p style={{ fontSize:13, color:"var(--muted)", fontFamily:"var(--font-mono)", marginBottom:16 }}>Raw dumps, searchable and traceable</p>
+          <input value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="Search notes..." style={{ width:"100%", maxWidth:400, padding:"10px 14px", borderRadius:2, border:"1px solid var(--hairline)", fontSize:13, background:"var(--surface)", color:"var(--text)", marginBottom:20, fontFamily:"var(--font-mono)", boxSizing:"border-box" }} />
+          {notes.filter(n => !searchQ || n.rawText.toLowerCase().includes(searchQ.toLowerCase())).map(n => (
+            <div key={n.id} style={{ padding:"16px 18px", background:"var(--surface)", border:"1px solid var(--hairline)", borderRadius:2, marginBottom:8 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                <span style={{ fontFamily:"var(--font-mono)", fontSize:11, color:"var(--cyan)" }}>{fmtFull(n.createdAt)}</span>
+                <div style={{ display:"flex", gap:6 }}>
+                  {n.extractedIds.length > 0 && <Badge color="var(--success)">→ {n.extractedIds.length} tasks extracted</Badge>}
+                  <Badge color="var(--muted)">{n.source}</Badge>
+                </div>
+              </div>
+              <div style={{ fontSize:13, color:"var(--text)", lineHeight:1.8, fontFamily:"var(--font-mono)", whiteSpace:"pre-wrap" }}>{n.rawText}</div>
+              {n.extractedIds.length > 0 && <div style={{ marginTop:10, paddingTop:10, borderTop:"1px solid var(--hairline)" }}>
+                <div style={{ fontSize:10, color:"var(--muted)", fontFamily:"var(--font-mono)", marginBottom:4 }}>EXTRACTED TASKS</div>
+                {tasks.filter(t => n.extractedIds.includes(t.id)).map(t => (
+                  <div key={t.id} onClick={() => setPanel({ type:"task", item: t })} style={{ fontSize:12, color:"var(--cyan)", cursor:"pointer", padding:"2px 0" }}>→ {t.name}</div>
+                ))}
+              </div>}
+              <div style={{ display:"flex", justifyContent:"flex-end", marginTop:8 }}>
+                <button onClick={() => { update("notes", prev => prev.filter(x => x.id !== n.id)); }} style={{ fontSize:11, color:"var(--muted)", background:"none", border:"none", cursor:"pointer" }}>delete</button>
+              </div>
             </div>
+          ))}
+          {notes.length === 0 && <div style={{ textAlign:"center", padding:"60px 0", color:"var(--muted)" }}><div style={{ fontSize:36, marginBottom:8 }}>📝</div>No notes yet. Hit ⌘K to capture your first thought.</div>}
+        </>}
+
+        {/* ========== TASKS VIEW ========== */}
+        {view === "tasks" && <>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+            <div>
+              <h1 style={{ fontSize:28, fontWeight:800, textShadow:"0 0 40px rgba(255,46,147,0.15)" }}>Tasks</h1>
+              <p style={{ fontSize:13, color:"var(--muted)", fontFamily:"var(--font-mono)" }}>{tasks.filter(t => t.status !== "Complete").length} active · {forgottenCount} forgotten</p>
+            </div>
+            <Btn small onClick={() => { const t = addTask({ name:"New Task", projectId:null, areaId:areas[0]?.id, status:"Not Started", priority:"Medium", effort:"M", due:null, notes:"", createdAt:now(), updatedAt:now(), touchedAt:now(), recurrence:null }); setPanel({ type:"task", item: t }); }}>+ Task</Btn>
+          </div>
+          {tasks.sort((a, b) => {
+            if (a.status === "Complete" && b.status !== "Complete") return 1;
+            if (a.status !== "Complete" && b.status === "Complete") return -1;
+            const aF = isForgotten(a), bF = isForgotten(b);
+            if (aF && !bF) return -1;
+            if (!aF && bF) return 1;
+            return new Date(b.touchedAt || b.createdAt) - new Date(a.touchedAt || a.createdAt);
+          }).map(t => {
+            const area = areas.find(a => a.id === t.areaId);
+            const forgotten = isForgotten(t);
+            return (
+              <div key={t.id} onClick={() => setPanel({ type:"task", item: t })} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 16px", background:"var(--surface)", border:`1px solid ${forgotten ? "var(--warning)30" : "var(--hairline)"}`, borderRadius:2, marginBottom:4, cursor:"pointer", transition:"all 0.15s" }}>
+                <button onClick={e => { e.stopPropagation(); if (t.status !== "Complete") completeTask(t); else saveTask(touchNow({ ...t, status:"Not Started" })); }} style={{ width:22, height:22, borderRadius:2, border:`2px solid ${SC[t.status]}`, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, cursor:"pointer", background: t.status === "Complete" ? SC[t.status] : "transparent", color: t.status === "Complete" ? "#000" : "transparent" }}>{t.status === "Complete" ? "✓" : ""}</button>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:13, fontWeight:600, textDecoration: t.status === "Complete" ? "line-through" : "none", color: t.status === "Complete" ? "var(--muted)" : "var(--text)" }}>{t.name}</div>
+                  <div style={{ display:"flex", gap:6, marginTop:4, alignItems:"center" }}>
+                    {area && <Badge color={area.color} s={{ fontSize:10, padding:"1px 6px" }}>{area.icon} {area.name}</Badge>}
+                    {t.due && <span style={{ fontFamily:"var(--font-mono)", fontSize:10, color: t.due < new Date().toISOString().slice(0,10) && t.status !== "Complete" ? "var(--magenta)" : "var(--muted)" }}>📅 {fmt(t.due)}</span>}
+                    {forgotten && <Badge color="var(--warning)" s={{ fontSize:10, padding:"1px 6px" }}>⚠ {daysSince(t.touchedAt || t.createdAt)}d untouched</Badge>}
+                    {t.sourceNoteId && <span style={{ fontFamily:"var(--font-mono)", fontSize:10, color:"var(--cyan)" }}>→ note</span>}
+                  </div>
+                </div>
+                <span style={{ width:8, height:8, borderRadius:4, background:PC[t.priority], flexShrink:0 }} title={t.priority} />
+                <span style={{ fontSize:11, fontWeight:700, color:EC[t.effort], fontFamily:"var(--font-mono)" }}>{t.effort}</span>
+              </div>
+            );
+          })}
+          {tasks.length === 0 && <div style={{ textAlign:"center", padding:"60px 0", color:"var(--muted)" }}>No tasks yet. Capture a mind dump to get started.</div>}
+        </>}
+
+        {/* ========== PROJECTS VIEW ========== */}
+        {view === "projects" && <>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+            <div>
+              <h1 style={{ fontSize:28, fontWeight:800, textShadow:"0 0 40px rgba(255,46,147,0.15)" }}>Projects</h1>
+              <p style={{ fontSize:13, color:"var(--muted)", fontFamily:"var(--font-mono)" }}>{projects.filter(p => p.status !== "Complete").length} active</p>
+            </div>
+            <Btn small onClick={() => { const p = addProject({ name:"New Project", areaId:areas[0]?.id, status:"Not Started", priority:"Medium", effort:"M", due:null, notes:"" }); setPanel({ type:"project", item: p }); }}>+ Project</Btn>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(280px, 1fr))", gap:12 }}>
+            {projects.map(p => {
+              const area = areas.find(a => a.id === p.areaId);
+              const linked = tasks.filter(t => t.projectId === p.id);
+              const done = linked.filter(t => t.status === "Complete").length;
+              const prog = linked.length ? Math.round((done / linked.length) * 100) : 0;
+              return (
+                <div key={p.id} onClick={() => setPanel({ type:"project", item: p })} style={{ padding:"18px 20px", background:"var(--surface)", border:"1px solid var(--hairline)", borderRadius:2, cursor:"pointer", transition:"all 0.15s", borderLeft:`3px solid ${area?.color || "var(--muted)"}` }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
+                    <div style={{ fontSize:15, fontWeight:700 }}>{p.name}</div>
+                    <Badge color={SC[p.status]} s={{ fontSize:10 }}>{p.status}</Badge>
+                  </div>
+                  {area && <Badge color={area.color} s={{ fontSize:10, marginBottom:8 }}>{area.icon} {area.name}</Badge>}
+                  <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:10 }}>
+                    <div style={{ flex:1, height:4, borderRadius:2, background:"var(--elevated)", overflow:"hidden" }}><div style={{ width:`${prog}%`, height:"100%", background:area?.color || "var(--cyan)", transition:"width 0.5s" }} /></div>
+                    <span style={{ fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)" }}>{done}/{linked.length}</span>
+                  </div>
+                  {p.due && <div style={{ fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)", marginTop:8 }}>Due {fmt(p.due)}</div>}
+                </div>
+              );
+            })}
+          </div>
+          {projects.length === 0 && <div style={{ textAlign:"center", padding:"60px 0", color:"var(--muted)" }}>No projects yet. They'll appear from AI proposals or manual creation.</div>}
+        </>}
+
+        {/* ========== BOARD VIEW ========== */}
+        {view === "board" && <>
+          <h1 style={{ fontSize:28, fontWeight:800, marginBottom:20, textShadow:"0 0 40px rgba(255,46,147,0.15)" }}>Board</h1>
+          <div style={{ display:"grid", gridTemplateColumns:`repeat(${STATUSES.length}, 1fr)`, gap:12, minHeight:"60vh" }}>
+            {STATUSES.map(status => (
+              <div key={status} onDragOver={e => e.preventDefault()} onDrop={e => { const id = e.dataTransfer.getData("taskId"); if (id) saveTask(touchNow({ ...tasks.find(t => t.id === id), status })); }} style={{ background:"var(--surface)", borderRadius:2, border:"1px solid var(--hairline)", padding:12 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12, padding:"0 4px" }}>
+                  <div style={{ width:8, height:8, borderRadius:4, background:SC[status] }} />
+                  <span style={{ fontSize:12, fontWeight:700, color:"var(--text)" }}>{status}</span>
+                  <span style={{ fontSize:10, color:"var(--muted)", fontFamily:"var(--font-mono)", marginLeft:"auto" }}>{tasks.filter(t => t.status === status).length}</span>
+                </div>
+                {tasks.filter(t => t.status === status).map(t => {
+                  const area = areas.find(a => a.id === t.areaId);
+                  return (
+                    <div key={t.id} draggable onDragStart={e => e.dataTransfer.setData("taskId", t.id)} onClick={() => setPanel({ type:"task", item: t })} style={{ padding:"10px 12px", background:"var(--elevated)", border:"1px solid var(--hairline)", borderRadius:2, marginBottom:6, cursor:"grab", fontSize:12 }}>
+                      <div style={{ fontWeight:600, marginBottom:4, color:"var(--text)" }}>{t.name}</div>
+                      <div style={{ display:"flex", gap:4, alignItems:"center" }}>
+                        <span style={{ width:6, height:6, borderRadius:3, background:PC[t.priority] }} />
+                        {area && <span style={{ fontSize:10, color:area.color }}>{area.icon}</span>}
+                        {t.due && <span style={{ fontSize:10, color:"var(--muted)", fontFamily:"var(--font-mono)", marginLeft:"auto" }}>{fmt(t.due)}</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
           </div>
         </>}
 
-        {/* CALENDAR */}
-        {view==="calendar"&&(()=>{
-          const yr=calMonth.getFullYear(), mn=calMonth.getMonth();
-          const fd=new Date(yr,mn,1).getDay();
-          const dim=new Date(yr,mn+1,0).getDate();
-          const today=new Date().toISOString().slice(0,10);
-          const sp=(fd+6)%7;
-          const days=[];
-          for(let i=0;i<sp;i++)days.push(null);
-          for(let i=1;i<=dim;i++)days.push(i);
-          while(days.length%7!==0)days.push(null);
+        {/* ========== CALENDAR VIEW ========== */}
+        {view === "calendar" && (() => {
+          const yr = calMonth.getFullYear(), mn = calMonth.getMonth();
+          const fd = new Date(yr, mn, 1).getDay();
+          const dim = new Date(yr, mn + 1, 0).getDate();
+          const today = new Date().toISOString().slice(0, 10);
+          const sp = (fd + 6) % 7;
+          const days = [];
+          for (let i = 0; i < sp; i++) days.push(null);
+          for (let i = 1; i <= dim; i++) days.push(i);
+          while (days.length % 7 !== 0) days.push(null);
 
-          const allItems=[
-            ...T.map(t=>({...t,itemType:"task"})),
-            ...P.filter(p=>p.status!=="Complete"&&p.due).map(p=>({...p,itemType:"project"})),
-            ...T.filter(t=>t.recurrence&&t.due&&t.status!=="Complete").flatMap(t=>{
-              return generateGhostDates(t.due,t.recurrence,t.recurrenceEnd,12).map((d,i)=>({...t,id:t.id+"_ghost_"+i,due:d,itemType:"ghost",originalName:t.name}));
-            })
+          const allItems = [
+            ...tasks.filter(t => t.due && t.status !== "Complete").map(t => ({ ...t, itemType: "task" })),
+            ...tasks.filter(t => t.recurrence && t.due && t.status !== "Complete").flatMap(t => {
+              const endStr = yr + "-" + String(mn + 2).padStart(2, "0") + "-01";
+              return generateGhostDates(t.due, t.recurrence, endStr, 5).map(d => ({ ...t, due: d, itemType: "ghost", ghostParent: t.id }));
+            }),
           ];
-          const getItems=(day)=>{
-            if(!day) return [];
-            const ds=`${yr}-${String(mn+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
-            return allItems.filter(x=>x.due===ds);
-          };
-          const selItems=calDay?getItems(calDay):[];
-          const selDateStr=calDay?`${yr}-${String(mn+1).padStart(2,"0")}-${String(calDay).padStart(2,"0")}`:null;
-
-          const dayCounts={};
-          for(let d=1;d<=dim;d++)dayCounts[d]=getItems(d).length;
-          const maxCt=Math.max(...Object.values(dayCounts),1);
 
           return <>
-            <div style={{fontSize:22,fontWeight:800,marginBottom:4}}>📆 Calendar</div>
-            <div style={{fontSize:13,color:"#94A3B8",marginBottom:20}}>Tasks and project deadlines</div>
-            <div style={{display:"flex",gap:16}}>
-              <div style={{flex:1}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <button onClick={()=>setCalMonth(new Date(yr,mn-1))} style={{background:"#fff",border:"1px solid #E2E8F0",width:34,height:34,borderRadius:10,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",color:"#64748B"}}>‹</button>
-                    <div style={{fontSize:18,fontWeight:800,minWidth:200,textAlign:"center"}}>{calMonth.toLocaleDateString("en-AU",{month:"long",year:"numeric"})}</div>
-                    <button onClick={()=>setCalMonth(new Date(yr,mn+1))} style={{background:"#fff",border:"1px solid #E2E8F0",width:34,height:34,borderRadius:10,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",color:"#64748B"}}>›</button>
+            <h1 style={{ fontSize:28, fontWeight:800, marginBottom:20, textShadow:"0 0 40px rgba(255,46,147,0.15)" }}>Calendar</h1>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+              <Btn small outline color="var(--muted)" onClick={() => setCalMonth(new Date(yr, mn - 1, 1))}>←</Btn>
+              <span style={{ fontWeight:700 }}>{calMonth.toLocaleDateString("en-AU", { month:"long", year:"numeric" })}</span>
+              <Btn small outline color="var(--muted)" onClick={() => setCalMonth(new Date(yr, mn + 1, 1))}>→</Btn>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(7, 1fr)", gap:2 }}>
+              {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(d => <div key={d} style={{ padding:"8px 4px", textAlign:"center", fontSize:11, fontWeight:600, color:"var(--muted)", fontFamily:"var(--font-mono)" }}>{d}</div>)}
+              {days.map((day, i) => {
+                if (!day) return <div key={i} style={{ minHeight:80, background:"var(--surface)", borderRadius:2 }} />;
+                const dateStr = yr + "-" + String(mn + 1).padStart(2, "0") + "-" + String(day).padStart(2, "0");
+                const isToday = dateStr === today;
+                const dayItems = allItems.filter(item => item.due === dateStr);
+                return (
+                  <div key={i} onDragOver={e => e.preventDefault()} onDrop={e => { const id = e.dataTransfer.getData("taskId"); if (id) handleCalDrop(id, day); }} style={{ minHeight:80, background:"var(--surface)", borderRadius:2, padding:"4px 6px", border: isToday ? "1px solid var(--magenta)40" : "1px solid var(--hairline)" }}>
+                    <div style={{ fontSize:11, fontWeight: isToday ? 700 : 400, color: isToday ? "var(--magenta)" : "var(--muted)", fontFamily:"var(--font-mono)", marginBottom:4 }}>{day}</div>
+                    {dayItems.slice(0, 3).map((item, j) => (
+                      <div key={j} draggable={item.itemType !== "ghost"} onDragStart={e => e.dataTransfer.setData("taskId", item.id)} onClick={() => { if (item.itemType !== "ghost") setPanel({ type:"task", item }); }} style={{ fontSize:10, padding:"2px 4px", borderRadius:2, marginBottom:2, background: item.itemType === "ghost" ? "transparent" : `${PC[item.priority]}20`, color: item.itemType === "ghost" ? "var(--muted)" : "var(--text)", borderLeft: `2px solid ${item.itemType === "ghost" ? "var(--muted)" : PC[item.priority]}`, cursor: item.itemType === "ghost" ? "default" : "pointer", fontStyle: item.itemType === "ghost" ? "italic" : "normal", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{item.name}</div>
+                    ))}
+                    {dayItems.length > 3 && <div style={{ fontSize:9, color:"var(--muted)", fontFamily:"var(--font-mono)" }}>+{dayItems.length - 3}</div>}
                   </div>
-                  <button onClick={()=>{setCalMonth(new Date());setCalDay(null)}} style={{background:"#EEF2FF",border:"none",padding:"6px 16px",borderRadius:20,fontSize:12,fontWeight:600,color:"#6366F1",cursor:"pointer"}}>Today</button>
-                </div>
-                <div style={{background:"#fff",borderRadius:16,border:"1px solid #E2E8F0",overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)"}}>
-                    {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d=> <div key={d} style={{padding:"10px 8px",textAlign:"center",fontSize:11,fontWeight:700,color:"#94A3B8",borderBottom:"1px solid #E2E8F0",background:"#F8FAFC"}}>{d}</div>)}
-                  </div>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)"}}>
-                    {days.map((day,i)=>{
-                      if(!day) return <div key={`e${i}`} style={{minHeight:95,borderBottom:"1px solid #F1F5F9",borderRight:i%7!==6?"1px solid #F1F5F9":"none",background:"#FAFAFA"}}/>;
-                      const ds=`${yr}-${String(mn+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
-                      const di=getItems(day);
-                      const isT=ds===today;
-                      const isSel=day===calDay;
-                      const isWe=(i%7)>=5;
-                      const isPast=ds<today;
-                      return <div key={day} onClick={()=>setCalDay(day===calDay?null:day)} onDragOver={e=>{e.preventDefault();e.currentTarget.style.background="#EEF2FF"}} onDragLeave={e=>{e.currentTarget.style.background=""}} onDrop={e=>{e.preventDefault();e.currentTarget.style.background="";const tid=e.dataTransfer.getData("text/plain");if(tid)handleCalDrop(tid,day)}} style={{minHeight:95,padding:"6px 7px",borderBottom:"1px solid #F1F5F9",borderRight:i%7!==6?"1px solid #F1F5F9":"none",background:isSel?"#EEF2FF":isT?"#F0FDF9":isWe?"#FAFAFA":"#fff",cursor:"pointer",transition:"background 0.1s",outline:isSel?"2px solid #6366F1":"none",outlineOffset:-2}}>
-                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
-                          <div style={{fontSize:12,fontWeight:isT?800:500,color:isT?"#fff":isPast?"#CBD5E1":"#64748B",background:isT?"#6366F1":"none",width:isT?24:"auto",height:isT?24:"auto",borderRadius:12,display:"flex",alignItems:"center",justifyContent:"center"}}>{day}</div>
-                          {di.length>0&&<div style={{fontSize:9,fontWeight:700,color:"#94A3B8",background:"#F1F5F9",padding:"1px 5px",borderRadius:8}}>{di.length}</div>}
-                        </div>
-                        {di.slice(0,2).map(item=>{const a=getA(item.area);const isProj=item.itemType==="project";const isGhost=item.itemType==="ghost";const isDone=item.status==="Complete";
-                          return <div key={item.id} style={{fontSize:10,fontWeight:isProj?700:600,padding:"2px 6px",borderRadius:4,marginBottom:2,background:isGhost?`${a.color}08`:isDone?"#F1F5F9":isProj?`${a.color}18`:a.bg,color:isDone?"#94A3B8":a.color,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textDecoration:isDone?"line-through":"none",borderLeft:isGhost?`2px dashed ${a.color}40`:isProj?`3px solid ${a.color}`:`2px solid ${a.color}60`}}>{isGhost?"🔁 ":isProj?"🎯 ":""}{item.name}</div>
-                        })}
-                        {di.length>2&&<div style={{fontSize:9,color:"#94A3B8",paddingLeft:4,fontWeight:600}}>+{di.length-2} more</div>}
-                      </div>;
-                    })}
-                  </div>
-                  <div style={{borderTop:"1px solid #E2E8F0",padding:"8px",background:"#F8FAFC"}}>
-                    <div style={{fontSize:10,fontWeight:700,color:"#94A3B8",marginBottom:6,paddingLeft:4}}>DAILY LOAD</div>
-                    <div style={{display:"flex",gap:2,alignItems:"end",height:28,paddingLeft:4}}>
-                      {Array.from({length:dim},(_,i)=>i+1).map(d=>{const ct=dayCounts[d]||0;const h=ct>0?Math.max(4,(ct/maxCt)*28):2;const ds=`${yr}-${String(mn+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;const isT=ds===today;
-                        return <div key={d} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center"}}><div style={{width:"100%",maxWidth:14,height:h,borderRadius:2,background:ct===0?"#E2E8F0":isT?"#6366F1":ct>=3?"#F97066":ct>=2?"#FDB022":"#47CD89",transition:"height 0.3s"}}/></div>
-                      })}
-                    </div>
-                    <div style={{display:"flex",gap:2,paddingLeft:4,marginTop:2}}>
-                      {Array.from({length:dim},(_,i)=>i+1).map(d=> <div key={d} style={{flex:1,textAlign:"center",fontSize:7,color:"#CBD5E1"}}>{d}</div>)}
-                    </div>
-                  </div>
-                </div>
-                <div style={{display:"flex",gap:16,marginTop:10,paddingLeft:4}}>
-                  <div style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"#64748B"}}><div style={{width:16,height:8,borderRadius:2,background:"#EFF8FF",borderLeft:"2px solid #53B1FD60"}}/>Task</div>
-                  <div style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"#64748B"}}><div style={{width:16,height:8,borderRadius:2,background:"#53B1FD18",borderLeft:"3px solid #53B1FD"}}/>Project</div>
-                  <div style={{display:"flex",gap:12,fontSize:11,color:"#64748B",marginLeft:"auto"}}>
-                    <span style={{display:"flex",alignItems:"center",gap:3}}><div style={{width:8,height:8,borderRadius:2,background:"#47CD89"}}/>1</span>
-                    <span style={{display:"flex",alignItems:"center",gap:3}}><div style={{width:8,height:8,borderRadius:2,background:"#FDB022"}}/>2</span>
-                    <span style={{display:"flex",alignItems:"center",gap:3}}><div style={{width:8,height:8,borderRadius:2,background:"#F97066"}}/>3+</span>
-                  </div>
-                </div>
-              </div>
-              {calDay&&<div style={{width:320,flexShrink:0}}>
-                <div style={{background:"#fff",borderRadius:16,border:"1px solid #E2E8F0",overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.04)",position:"sticky",top:24}}>
-                  <div style={{padding:"16px 20px",background:"#F8FAFC",borderBottom:"1px solid #E2E8F0"}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                      <div>
-                        <div style={{fontSize:11,fontWeight:700,color:"#94A3B8",textTransform:"uppercase",letterSpacing:0.5}}>{new Date(yr,mn,calDay).toLocaleDateString("en-AU",{weekday:"long"})}</div>
-                        <div style={{fontSize:22,fontWeight:800,color:"#1E293B"}}>{new Date(yr,mn,calDay).toLocaleDateString("en-AU",{day:"numeric",month:"long"})}</div>
-                      </div>
-                      <button onClick={()=>setCalDay(null)} style={{background:"#F1F5F9",border:"none",width:28,height:28,borderRadius:8,cursor:"pointer",fontSize:14,color:"#94A3B8",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
-                    </div>
-                    <div style={{fontSize:12,color:"#94A3B8",marginTop:4}}>{selItems.length} item{selItems.length!==1?"s":""}</div>
-                  </div>
-                  <div style={{padding:"12px 16px",maxHeight:500,overflowY:"auto"}}>
-                    {selItems.length===0&&<div style={{textAlign:"center",padding:"24px 0",color:"#CBD5E1",fontSize:13}}>No items scheduled</div>}
-                    {selItems.filter(x=>x.itemType==="project").map(item=>{const a=getA(item.area);
-                      return <div key={item.id} onClick={()=>setPanel({type:"project",item})} style={{padding:"12px 14px",borderRadius:12,marginBottom:8,background:a.bg,border:`1.5px solid ${a.color}30`,cursor:"pointer"}}>
-                        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}><span style={{fontSize:14}}>🎯</span><span style={{fontSize:10,fontWeight:700,color:a.color,textTransform:"uppercase",letterSpacing:0.5}}>PROJECT DEADLINE</span></div>
-                        <div style={{fontSize:14,fontWeight:700,color:"#1E293B",marginBottom:6}}>{item.name}</div>
-                        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}><Badge color={SC[item.status]} bg={SBG[item.status]}>{item.status}</Badge><Badge color={PC[item.priority]} bg={`${PC[item.priority]}15`}>{item.priority}</Badge></div>
-                      </div>
-                    })}
-                    {selItems.filter(x=>x.itemType==="task").map(item=>{const a=getA(item.area);const proj=P.find(p=>p.id===item.projectId);const isDone=item.status==="Complete";
-                      return <div key={item.id} draggable={!isDone} onDragStart={e=>{e.dataTransfer.setData("text/plain",item.id);setDragTask(item.id)}} onDragEnd={()=>setDragTask(null)} onClick={()=>setPanel({type:"task",item})} style={{padding:"12px 14px",borderRadius:12,marginBottom:6,background:dragTask===item.id?"#EEF2FF":"#F8FAFC",border:dragTask===item.id?"2px solid #6366F1":"1px solid #E2E8F0",borderLeft:`3px solid ${a.color}`,cursor:isDone?"pointer":"grab",opacity:isDone?0.6:1}}>
-                        <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
-                          <div style={{width:20,height:20,borderRadius:20,marginTop:1,border:`2px solid ${SC[item.status]}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,background:isDone?SC[item.status]:"transparent",color:isDone?"#fff":"transparent"}}>{isDone?"✓":""}</div>
-                          <div style={{flex:1}}>
-                            <div style={{fontSize:13,fontWeight:600,textDecoration:isDone?"line-through":"none",color:isDone?"#94A3B8":"#1E293B",marginBottom:4}}>{item.name}</div>
-                            {proj&&<div style={{fontSize:10,color:"#94A3B8",marginBottom:6}}>🔗 {proj.name}</div>}
-                            <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                              <Badge color={a.color} bg={a.bg}>{a.icon} {a.name}</Badge>
-                              <span style={{display:"flex",alignItems:"center",gap:3,fontSize:10,color:"#64748B"}}><span style={{width:7,height:7,borderRadius:4,background:PC[item.priority]}}/>{item.priority}</span>
-                              <Badge color={EC[item.effort]} bg={`${EC[item.effort]}15`}>{item.effort}</Badge>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    })}
-                  </div>
-                </div>
-              </div>}
+                );
+              })}
             </div>
           </>;
         })()}
 
-        {/* DASHBOARD */}
-        {view==="dashboard"&&<>
-          {/* AI BRIEFING */}
-          <div style={{background:"#fff",borderRadius:16,border:"1px solid #E2E8F0",padding:"20px",marginBottom:16,boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:briefing?12:0}}>
-              <div style={{display:"flex",alignItems:"center",gap:10}}>
-                <div style={{width:32,height:32,borderRadius:10,background:"linear-gradient(135deg,#F97066,#FB923C)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>🧠</div>
-                <div><div style={{fontSize:14,fontWeight:700}}>Daily Briefing</div>
-                {briefing&&<div style={{fontSize:10,color:"#CBD5E1"}}>{(() => { try { const c=JSON.parse(localStorage.getItem("pcc-briefing")||"{}"); return c.time ? "Generated " + new Date(c.time).toLocaleString("en-AU",{hour:"numeric",minute:"2-digit",hour12:true,day:"numeric",month:"short"}) : ""; } catch(e) { return ""; } })()}</div>}
-                </div>
+        {/* ========== DASHBOARD VIEW ========== */}
+        {view === "dashboard" && <>
+          <h1 style={{ fontSize:28, fontWeight:800, marginBottom:20, textShadow:"0 0 40px rgba(255,46,147,0.15)" }}>Dashboard</h1>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(180px, 1fr))", gap:12, marginBottom:24 }}>
+            {[
+              { label:"Active Tasks", value: tasks.filter(t => t.status !== "Complete").length, color:"var(--cyan)" },
+              { label:"Forgotten", value: forgottenCount, color:"var(--warning)" },
+              { label:"Active Projects", value: projects.filter(p => p.status !== "Complete").length, color:"var(--magenta)" },
+              { label:"Notes", value: notes.length, color:"var(--muted)" },
+              { label:"Proposals", value: inboxCount, color:"var(--success)" },
+            ].map((s, i) => (
+              <div key={i} style={{ padding:"18px 20px", background:"var(--surface)", border:"1px solid var(--hairline)", borderRadius:2 }}>
+                <div style={{ fontSize:11, fontWeight:600, color:"var(--muted)", fontFamily:"var(--font-mono)", marginBottom:4 }}>{s.label}</div>
+                <div style={{ fontSize:28, fontWeight:800, color:s.color }}>{s.value}</div>
               </div>
-              <button onClick={refreshBriefing} disabled={briefLoading} style={{background:briefLoading?"#94A3B8":"#EEF2FF",border:"none",padding:"6px 14px",borderRadius:16,fontSize:11,fontWeight:600,color:briefLoading?"#fff":"#6366F1",cursor:"pointer"}}>{briefLoading?"Generating...":"↻ Refresh"}</button>
+            ))}
+          </div>
+
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+            <div style={{ padding:"20px", background:"var(--surface)", border:"1px solid var(--hairline)", borderRadius:2 }}>
+              <div style={{ fontSize:13, fontWeight:700, marginBottom:12 }}>Tasks by Status</div>
+              <Donut size={120} stroke={14} center={tasks.length} sub="total" segments={STATUSES.map(s => ({ pct: tasks.length ? (tasks.filter(t => t.status === s).length / tasks.length) * 100 : 0, color: SC[s] }))} />
             </div>
-            {!briefing&&!briefLoading&&!localStorage.getItem("pcc-api-key")&&<div style={{fontSize:12,color:"#94A3B8",textAlign:"center",padding:"8px 0"}}>Set your API key in Settings to enable AI briefings</div>}
-            {briefLoading&&!briefing&&<div style={{fontSize:12,color:"#94A3B8",textAlign:"center",padding:"8px 0"}}>🧠 Analysing your projects and tasks...</div>}
-            {briefing&&<div>
-              {briefing.greeting&&<div style={{fontSize:14,fontWeight:600,color:"#1E293B",padding:"10px 14px",background:"linear-gradient(135deg,#EEF2FF,#F8FAFC)",borderRadius:10,marginBottom:10,borderLeft:"4px solid #6366F1"}}>💬 {briefing.greeting}</div>}
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                {briefing.critical&&briefing.critical.length>0&&<div style={{gridColumn:"1/3",padding:"10px 12px",borderRadius:10,background:"#FEF3F2",border:"1px solid #F9706620"}}><div style={{fontSize:11,fontWeight:700,color:"#F97066",marginBottom:4}}>🚨 CRITICAL</div>{briefing.critical.map((c,i)=> <div key={i} style={{fontSize:12,color:"#1E293B",marginBottom:2}}>{c}</div>)}</div>}
-                {briefing.overdue&&briefing.overdue.length>0&&<div style={{padding:"10px 12px",borderRadius:10,background:"#FFFAEB",border:"1px solid #FDB02220"}}><div style={{fontSize:11,fontWeight:700,color:"#FDB022",marginBottom:4}}>⚠️ OVERDUE</div>{briefing.overdue.map((c,i)=> <div key={i} style={{fontSize:11,color:"#64748B",marginBottom:2}}>{c}</div>)}</div>}
-                {briefing.blockers&&briefing.blockers.length>0&&<div style={{padding:"10px 12px",borderRadius:10,background:"#F1F5F9",border:"1px solid #94A3B820"}}><div style={{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:4}}>🔒 BLOCKERS</div>{briefing.blockers.map((c,i)=> <div key={i} style={{fontSize:11,color:"#64748B",marginBottom:2}}>{c}</div>)}</div>}
-                {briefing.today_focus&&briefing.today_focus.length>0&&<div style={{gridColumn:"1/3",padding:"10px 12px",borderRadius:10,background:"#EEF2FF",border:"1px solid #6366F120"}}><div style={{fontSize:11,fontWeight:700,color:"#6366F1",marginBottom:4}}>🎯 TODAY'S FOCUS</div>{briefing.today_focus.map((c,i)=> <div key={i} style={{fontSize:12,color:"#1E293B",marginBottom:2}}>• {c}</div>)}</div>}
-                {briefing.this_week&&briefing.this_week.length>0&&<div style={{padding:"10px 12px",borderRadius:10,background:"#EFF8FF",border:"1px solid #53B1FD20"}}><div style={{fontSize:11,fontWeight:700,color:"#53B1FD",marginBottom:4}}>📅 THIS WEEK</div>{briefing.this_week.map((c,i)=> <div key={i} style={{fontSize:11,color:"#64748B",marginBottom:2}}>{c}</div>)}</div>}
-                {briefing.wins&&briefing.wins.length>0&&<div style={{padding:"10px 12px",borderRadius:10,background:"#ECFDF3",border:"1px solid #47CD8920"}}><div style={{fontSize:11,fontWeight:700,color:"#47CD89",marginBottom:4}}>🏆 WINS</div>{briefing.wins.map((c,i)=> <div key={i} style={{fontSize:11,color:"#64748B",marginBottom:2}}>{c}</div>)}</div>}
+            <div style={{ padding:"20px", background:"var(--surface)", border:"1px solid var(--hairline)", borderRadius:2 }}>
+              <div style={{ fontSize:13, fontWeight:700, marginBottom:12 }}>By Area</div>
+              {areas.map(a => {
+                const count = tasks.filter(t => t.areaId === a.id && t.status !== "Complete").length;
+                return (
+                  <div key={a.id} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+                    <span style={{ fontSize:12 }}>{a.icon}</span>
+                    <span style={{ fontSize:12, flex:1 }}>{a.name}</span>
+                    <div style={{ width:100, height:4, borderRadius:2, background:"var(--elevated)", overflow:"hidden" }}><div style={{ width:`${Math.min(100, count * 10)}%`, height:"100%", background:a.color }} /></div>
+                    <span style={{ fontFamily:"var(--font-mono)", fontSize:11, color:"var(--muted)", minWidth:20, textAlign:"right" }}>{count}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {forgottenCount > 0 && <div style={{ marginTop:16, padding:"16px 20px", background:"var(--surface)", border:"1px solid var(--warning)30", borderRadius:2 }}>
+            <div style={{ fontSize:13, fontWeight:700, color:"var(--warning)", marginBottom:10 }}>⚠ Forgotten Items ({forgottenCount})</div>
+            {tasks.filter(t => isForgotten(t)).slice(0, 5).map(t => (
+              <div key={t.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 0", borderBottom:"1px solid var(--hairline)" }}>
+                <span style={{ fontSize:12, flex:1 }}>{t.name}</span>
+                <span style={{ fontFamily:"var(--font-mono)", fontSize:10, color:"var(--warning)" }}>{daysSince(t.touchedAt || t.createdAt)}d</span>
+                <Btn small outline color="var(--cyan)" onClick={() => saveTask(touchNow({ ...t }))}>Touch</Btn>
               </div>
-              {briefing.recommendation&&<div style={{marginTop:8,padding:"10px 12px",borderRadius:10,background:"#F8FAFC",border:"1px solid #E2E8F0",fontSize:12,color:"#475569",lineHeight:1.6}}><span style={{fontWeight:700,color:"#1E293B"}}>💡 Recommendation: </span>{briefing.recommendation}</div>}
+            ))}
+          </div>}
+        </>}
+
+        {/* ========== DIGEST VIEW ========== */}
+        {view === "digest" && <>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+            <div>
+              <h1 style={{ fontSize:28, fontWeight:800, textShadow:"0 0 40px rgba(255,46,147,0.15)" }}>Daily Digest</h1>
+              <p style={{ fontSize:13, color:"var(--muted)", fontFamily:"var(--font-mono)" }}>Your AI morning briefing</p>
+            </div>
+            <Btn small onClick={refreshDigest} disabled={briefLoading}>{briefLoading ? "Generating..." : "🔮 Refresh"}</Btn>
+          </div>
+
+          {!briefing && !briefLoading && <div style={{ textAlign:"center", padding:"60px 0", color:"var(--muted)" }}>
+            <div style={{ fontSize:36, marginBottom:8 }}>🔮</div>
+            <div>Set your API key in Settings, then click Refresh to generate your first digest.</div>
+          </div>}
+
+          {briefLoading && <div style={{ textAlign:"center", padding:"60px 0" }}><div style={{ color:"var(--cyan)", fontFamily:"var(--font-mono)", fontSize:14 }}>● Generating digest...</div></div>}
+
+          {briefing && <>
+            {briefing.greeting && <div style={{ padding:"16px 20px", background:"var(--surface)", border:"1px solid var(--magenta)30", borderRadius:2, marginBottom:16, fontSize:15, fontWeight:600, color:"var(--text)" }}>{briefing.greeting}</div>}
+
+            {briefing.today_focus && briefing.today_focus.length > 0 && <div style={{ padding:"16px 20px", background:"var(--surface)", border:"1px solid var(--hairline)", borderRadius:2, marginBottom:12 }}>
+              <div style={{ fontSize:13, fontWeight:700, color:"var(--cyan)", marginBottom:10, fontFamily:"var(--font-mono)" }}>TODAY'S FOCUS</div>
+              {briefing.today_focus.map((f, i) => <div key={i} style={{ padding:"6px 0", fontSize:13, borderBottom:"1px solid var(--hairline)" }}>→ {f}</div>)}
             </div>}
-          </div>}
 
-          <div style={{fontSize:22,fontWeight:800,marginBottom:4}}>Welcome back, Lachie 👋</div>
-          <div style={{fontSize:13,color:"#94A3B8",marginBottom:20}}>Here's your planning overview</div>
-
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:12,marginBottom:20}}>
-            {[{l:"Total Projects",v:P.length,s:`${ipP} active`,c:"#6366F1",i:"🎯"},{l:"Tasks Done",v:`${cT}/${T.length}`,s:`${T.length?Math.round(cT/T.length*100):0}%`,c:"#47CD89",i:"✅"},{l:"Critical",v:cr,s:cr?"Needs attention":"All clear",c:"#F97066",i:"🚨"},{l:"Overdue",v:od,s:od?"Past due":"On track",c:od?"#FB923C":"#47CD89",i:"⏰"}].map((c,i)=><div key={i} style={{background:"#fff",borderRadius:16,padding:"18px 20px",border:"1px solid #E2E8F0",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}><div style={{fontSize:10,fontWeight:600,color:"#94A3B8",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>{c.l}</div><div style={{fontSize:28,fontWeight:800,color:c.c}}>{c.v}</div><div style={{fontSize:11,color:"#94A3B8",marginTop:2}}>{c.s}</div></div>)}
-          </div>
-
-          <div style={{display:"grid",gridTemplateColumns:"280px 1fr",gap:16,marginBottom:20}}>
-            {/* Donut */}
-            <div style={{background:"#fff",borderRadius:16,padding:"20px",border:"1px solid #E2E8F0",display:"flex",flexDirection:"column",alignItems:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
-              <div style={{fontSize:14,fontWeight:700,marginBottom:14,alignSelf:"flex-start"}}>Project Status</div>
-              <Donut size={140} stroke={16} center={P.length} sub="Projects" segments={statusPcts.filter(s=>s.pct>0).map(s=>({pct:s.pct,color:SC[s.s]}))}/>
-              <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:14,width:"100%"}}>
-                {statusPcts.map(s=><div key={s.s} style={{display:"flex",alignItems:"center",gap:8,fontSize:12}}><span style={{width:10,height:10,borderRadius:5,background:SC[s.s],flexShrink:0}}/><span style={{flex:1,color:"#64748B"}}>{s.s}</span><span style={{fontWeight:700,color:"#1E293B"}}>{s.count}</span><span style={{fontSize:10,color:"#94A3B8"}}>{s.pct}%</span></div>)}
-              </div>
-            </div>
-            {/* Area Cards */}
-            <div style={{background:"#fff",borderRadius:16,padding:"20px",border:"1px solid #E2E8F0",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
-              <div style={{fontSize:14,fontWeight:700,marginBottom:14}}>Areas</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                {AREAS.map(a=>{const ap=P.filter(p=>p.area===a.id);const at=T.filter(t=>t.area===a.id);const dn=at.filter(t=>t.status==="Complete").length;const pct=at.length?Math.round(dn/at.length*100):0;
-                  return <div key={a.id} onClick={()=>{setAf(a.id);setView("projects")}} style={{padding:"12px 14px",borderRadius:12,background:a.bg,cursor:"pointer",border:`1px solid ${a.color}20`,transition:"all 0.15s"}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}><span style={{fontSize:12,fontWeight:700,color:a.color}}>{a.icon} {a.name}</span><span style={{fontSize:10,color:"#94A3B8"}}>{ap.length}p</span></div>
-                    <PBar value={pct} color={a.color} h={6}/>
-                    <div style={{fontSize:10,color:"#94A3B8",marginTop:3}}>{dn}/{at.length} tasks · {pct}%</div>
-                  </div>})}
-              </div>
-            </div>
-          </div>
-
-          <div style={{background:"#fff",borderRadius:16,padding:"20px",border:"1px solid #E2E8F0",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
-            <div style={{fontSize:14,fontWeight:700,marginBottom:12}}>Upcoming Deadlines</div>
-            {[...P].filter(p=>p.status!=="Complete"&&p.due).sort((a,b)=>new Date(a.due)-new Date(b.due)).slice(0,6).map((p,i,arr)=>{const a=getA(p.area);const isOd=new Date(p.due)<new Date();return <div key={p.id} onClick={()=>setPanel({type:"project",item:p})} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",borderRadius:12,background:isOd?"#FEF3F2":"#F8FAFC",marginBottom:4,cursor:"pointer",border:"1px solid #E2E8F0",transition:"all 0.15s"}}>
-              <div style={{width:36,height:36,borderRadius:10,background:a.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,border:`1px solid ${a.color}30`}}>{a.icon}</div>
-              <div style={{flex:1}}><div style={{fontSize:13,fontWeight:600}}>{p.name}</div><div style={{fontSize:10,color:"#94A3B8"}}>{a.name}</div></div>
-              <Badge color={SC[p.status]} bg={SBG[p.status]}>{p.status}</Badge>
-              <div style={{fontSize:12,fontWeight:600,color:isOd?"#F97066":"#64748B",minWidth:50,textAlign:"right"}}>{isOd?"⚠️ ":""}{new Date(p.due).toLocaleDateString("en-AU",{day:"numeric",month:"short"})}</div>
-            </div>})}
-          </div>
-        </>}
-
-        {/* INBOX */}
-        {view==="inbox"&&<><div style={{fontSize:22,fontWeight:800,marginBottom:4}}>🤖 AI Inbox</div><div style={{fontSize:13,color:"#94A3B8",marginBottom:20}}>Quick capture meeting notes into structured tasks</div><AIInbox projects={P} onAccept={aT}/></>}
-
-        {/* PROJECTS */}
-        {view==="projects"&&<><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><div style={{display:"flex",alignItems:"center",gap:12}}><input type="checkbox" checked={selP.size===fp.length&&fp.length>0} onChange={()=>selP.size===fp.length?setSelP(new Set()):selAllP()} style={{width:18,height:18,cursor:"pointer",accentColor:"#6366F1"}}/><div><div style={{fontSize:22,fontWeight:800}}>Projects</div><div style={{fontSize:13,color:"#94A3B8"}}>{fp.length} projects{af!=="all"?` in ${getA(af).name}`:""}</div></div></div><Btn onClick={aP}>+ New Project</Btn></div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:12}}>
-            {fp.map(p=>{const a=getA(p.area);const pt=T.filter(t=>t.projectId===p.id);const dn=pt.filter(t=>t.status==="Complete").length;const prog=pt.length?Math.round(dn/pt.length*100):0;const isSel=selP.has(p.id);
-              return <div key={p.id} style={{background:"#fff",borderRadius:16,padding:"18px 20px",border:isSel?"2px solid #6366F1":"1px solid #E2E8F0",cursor:"pointer",boxShadow:isSel?"0 0 0 3px #6366F120":"0 1px 3px rgba(0,0,0,0.04)",transition:"all 0.15s",position:"relative"}}>
-                <input type="checkbox" checked={isSel} onChange={()=>toggleSelP(p.id)} onClick={e=>e.stopPropagation()} style={{position:"absolute",top:12,left:12,width:16,height:16,cursor:"pointer",accentColor:"#6366F1"}}/>
-                <div onClick={()=>setPanel({type:"project",item:p})} style={{paddingLeft:24}}>
-                <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><Badge color={a.color} bg={a.bg}>{a.icon} {a.name}</Badge><Badge color={SC[p.status]} bg={SBG[p.status]}>{p.status}</Badge></div>
-                <div style={{fontSize:15,fontWeight:700,marginBottom:8}}>{p.name}</div>
-                <PBar value={prog} color={a.color} h={6}/>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
-                  <div style={{display:"flex",gap:6,alignItems:"center"}}><span style={{width:9,height:9,borderRadius:5,background:PC[p.priority]}}/><span style={{fontSize:11,color:"#64748B"}}>{p.priority}</span><Badge color={EC[p.effort]} bg={`${EC[p.effort]}15`} s={{fontSize:10}}>{p.effort}</Badge></div>
-                  <span style={{fontSize:11,color:"#94A3B8"}}>{pt.length>0?`${dn}/${pt.length} tasks`:"0 tasks"} · {p.due?new Date(p.due).toLocaleDateString("en-AU",{day:"numeric",month:"short"}):"—"}</span>
+            {briefing.forgotten && briefing.forgotten.length > 0 && <div style={{ padding:"16px 20px", background:"var(--surface)", border:"1px solid var(--warning)30", borderRadius:2, marginBottom:12 }}>
+              <div style={{ fontSize:13, fontWeight:700, color:"var(--warning)", marginBottom:10, fontFamily:"var(--font-mono)" }}>⚠ YOU FORGOT ABOUT...</div>
+              {briefing.forgotten.map((f, i) => (
+                <div key={i} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 0", borderBottom:"1px solid var(--hairline)" }}>
+                  <span style={{ flex:1, fontSize:13 }}>{f.name || f}</span>
+                  {f.days && <span style={{ fontFamily:"var(--font-mono)", fontSize:10, color:"var(--warning)" }}>{f.days}d</span>}
+                  <Btn small outline color="var(--cyan)" onClick={() => { const t = tasks.find(t => t.name === f.name); if (t) saveTask(touchNow({ ...t })); }}>Touch</Btn>
                 </div>
+              ))}
+            </div>}
+
+            {briefing.incoming && briefing.incoming.length > 0 && <div style={{ padding:"16px 20px", background:"var(--surface)", border:"1px solid var(--hairline)", borderRadius:2, marginBottom:12 }}>
+              <div style={{ fontSize:13, fontWeight:700, color:"var(--magenta)", marginBottom:10, fontFamily:"var(--font-mono)" }}>INCOMING</div>
+              {briefing.incoming.map((f, i) => <div key={i} style={{ padding:"6px 0", fontSize:13, borderBottom:"1px solid var(--hairline)" }}>{f.name || f} {f.due && <span style={{ fontFamily:"var(--font-mono)", fontSize:10, color:"var(--muted)" }}>— due {f.due}</span>}</div>)}
+            </div>}
+
+            {briefing.stalled && briefing.stalled.length > 0 && <div style={{ padding:"16px 20px", background:"var(--surface)", border:"1px solid var(--hairline)", borderRadius:2, marginBottom:12 }}>
+              <div style={{ fontSize:13, fontWeight:700, color:"var(--muted)", marginBottom:10, fontFamily:"var(--font-mono)" }}>STALLED</div>
+              {briefing.stalled.map((f, i) => <div key={i} style={{ padding:"6px 0", fontSize:13, borderBottom:"1px solid var(--hairline)" }}>{f.name || f}</div>)}
+            </div>}
+
+            {briefing.recommendation && <div style={{ padding:"16px 20px", background:"var(--surface)", border:"1px solid var(--hairline)", borderRadius:2, marginBottom:12 }}>
+              <div style={{ fontSize:13, fontWeight:700, color:"var(--success)", marginBottom:10, fontFamily:"var(--font-mono)" }}>RECOMMENDATION</div>
+              <div style={{ fontSize:13, lineHeight:1.6, color:"var(--text)" }}>{briefing.recommendation}</div>
+            </div>}
+          </>}
+        </>}
+
+        {/* ========== INBOX VIEW ========== */}
+        {view === "inbox" && <>
+          <h1 style={{ fontSize:28, fontWeight:800, marginBottom:4, textShadow:"0 0 40px rgba(255,46,147,0.15)" }}>Inbox</h1>
+          <p style={{ fontSize:13, color:"var(--muted)", fontFamily:"var(--font-mono)", marginBottom:20 }}>AI proposals awaiting your decision</p>
+
+          {proposals.filter(p => p.status === "pending").map(prop => {
+            const area = areas.find(a => a.id === prop.areaId);
+            return (
+              <div key={prop.id} style={{ padding:"18px 20px", background:"var(--surface)", border:"1px solid var(--hairline)", borderRadius:2, marginBottom:12 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
+                  <div>
+                    <div style={{ fontSize:15, fontWeight:700 }}>{prop.suggestedName}</div>
+                    {area && <Badge color={area.color} s={{ marginTop:4 }}>{area.icon} {area.name}</Badge>}
+                  </div>
+                  <div style={{ display:"flex", gap:6 }}>
+                    <div style={{ width:8, height:8, borderRadius:4, background: (prop.confidence || 0) >= 0.7 ? "var(--success)" : "var(--warning)", marginTop:6 }} title={`Confidence: ${Math.round((prop.confidence || 0) * 100)}%`} />
+                  </div>
                 </div>
-              </div>})}
-          </div>
-          {selP.size>0&&<div style={{position:"fixed",bottom:20,left:"50%",transform:"translateX(-50%)",background:"#1E293B",color:"#fff",borderRadius:16,padding:"12px 20px",display:"flex",alignItems:"center",gap:12,boxShadow:"0 8px 30px rgba(0,0,0,0.25)",zIndex:900}}>
-            <span style={{fontSize:13,fontWeight:700}}>{selP.size} selected</span>
-            <div style={{width:1,height:20,background:"#475569"}}/>
-            <button onClick={bulkDeleteP} style={{background:"#F97066",color:"#fff",border:"none",padding:"6px 14px",borderRadius:10,fontSize:12,fontWeight:600,cursor:"pointer"}}>🗑 Delete</button>
-            <select onChange={e=>{if(e.target.value)bulkStatusP(e.target.value);e.target.value=""}} style={{background:"#334155",color:"#fff",border:"none",padding:"6px 10px",borderRadius:10,fontSize:12,cursor:"pointer"}}><option value="">Status...</option>{STATUSES.map(s=> <option key={s} value={s}>{s}</option>)}</select>
-            <select onChange={e=>{if(e.target.value)bulkPriorityP(e.target.value);e.target.value=""}} style={{background:"#334155",color:"#fff",border:"none",padding:"6px 10px",borderRadius:10,fontSize:12,cursor:"pointer"}}><option value="">Priority...</option>{PRIORITIES.map(p=> <option key={p} value={p}>{p}</option>)}</select>
-            <button onClick={()=>bulkStatusP("Complete")} style={{background:"#47CD89",color:"#fff",border:"none",padding:"6px 14px",borderRadius:10,fontSize:12,fontWeight:600,cursor:"pointer"}}>✓ Complete</button>
-            <button onClick={()=>setSelP(new Set())} style={{background:"none",color:"#94A3B8",border:"none",padding:"6px",cursor:"pointer",fontSize:14}}>✕</button>
-          </div>}
-        </>}
-
-        {/* TASKS */}
-        {view==="tasks"&&<><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><div style={{display:"flex",alignItems:"center",gap:12}}><input type="checkbox" checked={selT.size===ft.length&&ft.length>0} onChange={()=>selT.size===ft.length?setSelT(new Set()):selAllT()} style={{width:18,height:18,cursor:"pointer",accentColor:"#6366F1"}}/><div><div style={{fontSize:22,fontWeight:800}}>Tasks</div><div style={{fontSize:13,color:"#94A3B8"}}>{ft.length} tasks{af!=="all"?` in ${getA(af).name}`:""}</div></div></div><Btn onClick={aNT}>+ New Task</Btn></div>
-          {ft.sort((a,b)=>{const si=STATUSES.indexOf(a.status)-STATUSES.indexOf(b.status);return si!==0?si:PRIORITIES.indexOf(a.priority)-PRIORITIES.indexOf(b.priority)}).map(t=>{const a=getA(t.area);const proj=P.find(p=>p.id===t.projectId);const isSel=selT.has(t.id);return <div key={t.id} style={{background:"#fff",borderRadius:12,padding:"12px 16px",border:isSel?"2px solid #6366F1":"1px solid #E2E8F0",cursor:"pointer",display:"flex",alignItems:"center",gap:12,marginBottom:4,boxShadow:isSel?"0 0 0 3px #6366F120":"0 1px 2px rgba(0,0,0,0.03)"}}>
-            <input type="checkbox" checked={isSel} onChange={()=>toggleSelT(t.id)} onClick={e=>e.stopPropagation()} style={{width:16,height:16,cursor:"pointer",accentColor:"#6366F1",flexShrink:0}}/>
-            <div onClick={()=>setPanel({type:"task",item:t})} style={{display:"flex",alignItems:"center",gap:12,flex:1}}>
-            <div style={{width:22,height:22,borderRadius:22,border:`2px solid ${SC[t.status]}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,background:t.status==="Complete"?SC[t.status]:"transparent",color:t.status==="Complete"?"#fff":"transparent"}}>{t.status==="Complete"?"✓":""}</div>
-            <div style={{flex:1}}><div style={{fontSize:13,fontWeight:600,textDecoration:t.status==="Complete"?"line-through":"none",color:t.status==="Complete"?"#94A3B8":"#1E293B"}}>{t.recurrence&&<span title={getRecurrenceLabel(t.recurrence)} style={{marginRight:4}}>🔁</span>}{t.name}</div>{proj&&<div style={{fontSize:10,color:"#94A3B8",marginTop:1}}>🔗 {proj.name}</div>}</div>
-            <Badge color={SC[t.status]} bg={SBG[t.status]}>{t.status}</Badge>
-            <span style={{width:9,height:9,borderRadius:5,background:PC[t.priority]}} title={t.priority}/>
-            <Badge color={EC[t.effort]} bg={`${EC[t.effort]}15`}>{t.effort}</Badge>
-            <span style={{fontSize:11,color:"#94A3B8",minWidth:40}}>{t.due?new Date(t.due).toLocaleDateString("en-AU",{day:"numeric",month:"short"}):""}</span>
-            </div>
-          </div>})}
-          {selT.size>0&&<div style={{position:"fixed",bottom:20,left:"50%",transform:"translateX(-50%)",background:"#1E293B",color:"#fff",borderRadius:16,padding:"12px 20px",display:"flex",alignItems:"center",gap:12,boxShadow:"0 8px 30px rgba(0,0,0,0.25)",zIndex:900,flexWrap:"wrap"}}>
-            <span style={{fontSize:13,fontWeight:700}}>{selT.size} selected</span>
-            <div style={{width:1,height:20,background:"#475569"}}/>
-            <button onClick={bulkDeleteT} style={{background:"#F97066",color:"#fff",border:"none",padding:"6px 14px",borderRadius:10,fontSize:12,fontWeight:600,cursor:"pointer"}}>🗑 Delete</button>
-            <select onChange={e=>{if(e.target.value)bulkStatusT(e.target.value);e.target.value=""}} style={{background:"#334155",color:"#fff",border:"none",padding:"6px 10px",borderRadius:10,fontSize:12,cursor:"pointer"}}><option value="">Status...</option>{STATUSES.map(s=> <option key={s} value={s}>{s}</option>)}</select>
-            <select onChange={e=>{if(e.target.value)bulkPriorityT(e.target.value);e.target.value=""}} style={{background:"#334155",color:"#fff",border:"none",padding:"6px 10px",borderRadius:10,fontSize:12,cursor:"pointer"}}><option value="">Priority...</option>{PRIORITIES.map(p=> <option key={p} value={p}>{p}</option>)}</select>
-            <select onChange={e=>{if(e.target.value)bulkAssignT(e.target.value);e.target.value=""}} style={{background:"#334155",color:"#fff",border:"none",padding:"6px 10px",borderRadius:10,fontSize:12,cursor:"pointer"}}><option value="">Assign project...</option><option value="__none">No project</option>{P.map(p=> <option key={p.id} value={p.id}>{p.name}</option>)}</select>
-            <button onClick={()=>bulkStatusT("Complete")} style={{background:"#47CD89",color:"#fff",border:"none",padding:"6px 14px",borderRadius:10,fontSize:12,fontWeight:600,cursor:"pointer"}}>✓ Complete</button>
-            <button onClick={()=>setSelT(new Set())} style={{background:"none",color:"#94A3B8",border:"none",padding:"6px",cursor:"pointer",fontSize:14}}>✕</button>
-          </div>}
-        </>}
-
-        {/* BOARD */}
-        {view==="board"&&<><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><div><div style={{fontSize:22,fontWeight:800}}>Board</div><div style={{fontSize:13,color:"#94A3B8"}}>Drag cards between columns{af!=="all"?` · ${getA(af).name}`:""}</div></div><Btn onClick={aNT}>+ New Task</Btn></div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-            {STATUSES.map(status=>{const col=ft.filter(t=>t.status===status);return <div key={status} onDragOver={e=>{e.preventDefault();e.currentTarget.style.background="#F1F5F9";e.currentTarget.style.borderRadius="12px"}} onDragLeave={e=>{e.currentTarget.style.background="";e.currentTarget.style.borderRadius=""}} onDrop={e=>{e.preventDefault();e.currentTarget.style.background="";const tid=e.dataTransfer.getData("text/plain");if(tid){const task=T.find(x=>x.id===tid);if(task)sT({...task,status})}}}><div style={{fontSize:12,fontWeight:700,color:SC[status],marginBottom:8,display:"flex",alignItems:"center",gap:6}}><span style={{width:8,height:8,borderRadius:4,background:SC[status]}}/>{status} ({col.length})</div>
-              <div style={{display:"flex",flexDirection:"column",gap:6,minHeight:60}}>
-                {col.map(t=>{const a=getA(t.area);const proj=P.find(p=>p.id===t.projectId);return <div key={t.id} draggable={true} onDragStart={e=>{e.dataTransfer.setData("text/plain",t.id);e.currentTarget.style.opacity="0.4"}} onDragEnd={e=>{e.currentTarget.style.opacity="1"}} onClick={()=>setPanel({type:"task",item:t})} style={{background:"#fff",borderRadius:12,padding:"12px",border:"1px solid #E2E8F0",cursor:"grab",boxShadow:"0 1px 2px rgba(0,0,0,0.03)",transition:"opacity 0.15s"}}>
-                  <div style={{fontSize:12,fontWeight:600,marginBottom:4}}>{t.recurrence&&<span style={{marginRight:3}}>🔁</span>}{t.name}</div>
-                  {proj&&<div style={{fontSize:9,color:"#94A3B8",marginBottom:4}}>🔗 {proj.name}</div>}
-                  <div style={{display:"flex",gap:4,alignItems:"center",justifyContent:"space-between"}}><div style={{display:"flex",gap:4,alignItems:"center"}}><span style={{width:7,height:7,borderRadius:4,background:PC[t.priority]}}/><Badge color={EC[t.effort]} bg={`${EC[t.effort]}15`} s={{fontSize:9,padding:"1px 6px"}}>{t.effort}</Badge></div><span style={{fontSize:9,color:"#94A3B8"}}>{t.due?new Date(t.due).toLocaleDateString("en-AU",{day:"numeric",month:"short"}):""}</span></div>
-                </div>})}
+                {prop.themeSummary && <div style={{ fontSize:12, color:"var(--muted)", lineHeight:1.5, marginBottom:12 }}>{prop.themeSummary}</div>}
+                <div style={{ display:"flex", gap:8 }}>
+                  <Btn small color="var(--success)" onClick={() => {
+                    const p = addProject({ name: prop.suggestedName, areaId: prop.areaId || areas[0]?.id, status:"Not Started", priority:"Medium", effort:"M", due:null, notes: prop.themeSummary || "", aiProposed: true, proposalEvidence: prop.evidenceNoteIds });
+                    update("proposals", prev => prev.map(x => x.id === prop.id ? { ...x, status:"accepted" } : x));
+                    setToast({ message: `Project "${prop.suggestedName}" created`, type:"success" });
+                  }}>Create Project</Btn>
+                  <Btn small outline color="var(--muted)" onClick={() => { update("proposals", prev => prev.map(x => x.id === prop.id ? { ...x, status:"dismissed" } : x)); }}>Not now</Btn>
+                </div>
               </div>
-            </div>})}
+            );
+          })}
+
+          {proposals.filter(p => p.status === "pending").length === 0 && <div style={{ textAlign:"center", padding:"60px 0", color:"var(--muted)" }}>
+            <div style={{ fontSize:36, marginBottom:8 }}>📥</div>
+            <div>No pending proposals. AI will suggest projects when it detects recurring themes in your captures.</div>
+          </div>}
+
+          {proposals.filter(p => p.status !== "pending").length > 0 && <div style={{ marginTop:24 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", fontFamily:"var(--font-mono)", marginBottom:8 }}>HISTORY</div>
+            {proposals.filter(p => p.status !== "pending").map(prop => (
+              <div key={prop.id} style={{ padding:"8px 14px", background:"var(--surface)", border:"1px solid var(--hairline)", borderRadius:2, marginBottom:4, opacity:0.5 }}>
+                <span style={{ fontSize:12 }}>{prop.suggestedName}</span>
+                <Badge color={prop.status === "accepted" ? "var(--success)" : "var(--muted)"} s={{ fontSize:10, marginLeft:8 }}>{prop.status}</Badge>
+              </div>
+            ))}
+          </div>}
+        </>}
+
+        {/* ========== SETTINGS VIEW ========== */}
+        {view === "settings" && <>
+          <h1 style={{ fontSize:28, fontWeight:800, marginBottom:20, textShadow:"0 0 40px rgba(255,46,147,0.15)" }}>Settings</h1>
+
+          <div style={{ background:"var(--surface)", borderRadius:2, border:"1px solid var(--hairline)", padding:"24px", maxWidth:550, marginBottom:16 }}>
+            <div style={{ fontSize:14, fontWeight:700, marginBottom:4 }}>🤖 Anthropic API Key</div>
+            <div style={{ fontSize:12, color:"var(--muted)", marginBottom:12 }}>Get your key from <a href="https://console.anthropic.com/settings/keys" target="_blank" style={{ color:"var(--cyan)" }}>console.anthropic.com</a></div>
+            <input type="password" defaultValue={localStorage.getItem(API_KEY_KEY) || ""} onChange={e => localStorage.setItem(API_KEY_KEY, e.target.value)} placeholder="sk-ant-api03-..." style={{ width:"100%", padding:"10px 14px", borderRadius:2, border:"1px solid var(--hairline)", fontSize:13, boxSizing:"border-box", fontFamily:"var(--font-mono)", background:"var(--elevated)", color:"var(--text)" }} />
+            <div style={{ fontSize:10, color:"var(--muted)", marginTop:6, fontFamily:"var(--font-mono)" }}>Stored in your browser only</div>
+          </div>
+
+          <div style={{ background:"var(--surface)", borderRadius:2, border:"1px solid var(--hairline)", padding:"24px", maxWidth:550, marginBottom:16 }}>
+            <div style={{ fontSize:14, fontWeight:700, marginBottom:12 }}>🏷️ Areas</div>
+            {areas.map(a => (
+              <div key={a.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px", background:"var(--elevated)", border:"1px solid var(--hairline)", borderRadius:2, marginBottom:6 }}>
+                <span style={{ fontSize:16 }}>{a.icon}</span>
+                <input value={a.name} onChange={e => update("areas", prev => prev.map(x => x.id === a.id ? { ...x, name: e.target.value } : x))} style={{ flex:1, fontSize:13, fontWeight:600, background:"transparent", border:"none", color:"var(--text)", outline:"none" }} />
+                <input value={a.icon} onChange={e => update("areas", prev => prev.map(x => x.id === a.id ? { ...x, icon: e.target.value } : x))} style={{ width:36, fontSize:16, textAlign:"center", background:"transparent", border:"1px solid var(--hairline)", borderRadius:2, color:"var(--text)" }} />
+                <div style={{ display:"flex", gap:3 }}>
+                  {AREA_SWATCHES.map(sw => <button key={sw} onClick={() => update("areas", prev => prev.map(x => x.id === a.id ? { ...x, color: sw, accent: sw } : x))} style={{ width:16, height:16, borderRadius:2, background:sw, border: a.color === sw ? "2px solid var(--text)" : "1px solid var(--hairline)", cursor:"pointer" }} />)}
+                </div>
+                <button onClick={() => update("areas", prev => prev.filter(x => x.id !== a.id))} style={{ background:"none", border:"none", color:"var(--muted)", cursor:"pointer", fontSize:14 }}>×</button>
+              </div>
+            ))}
+            <div style={{ display:"flex", gap:8, marginTop:10 }}>
+              <input id="newAreaName" placeholder="New area name..." style={{ flex:1, padding:"8px 12px", borderRadius:2, border:"1px solid var(--hairline)", fontSize:12, background:"var(--elevated)", color:"var(--text)" }} />
+              <Btn small onClick={() => {
+                const inp = document.getElementById("newAreaName");
+                if (inp.value.trim()) {
+                  update("areas", prev => [...prev, { id: uid(), name: inp.value.trim(), color: AREA_SWATCHES[prev.length % AREA_SWATCHES.length], accent: AREA_SWATCHES[prev.length % AREA_SWATCHES.length], icon: "📌", keywords: [], userCreated: true }]);
+                  inp.value = "";
+                }
+              }}>+ Add</Btn>
+            </div>
+            <div style={{ marginTop:12 }}>
+              <div style={{ fontSize:11, color:"var(--muted)", fontFamily:"var(--font-mono)", marginBottom:6 }}>KEYWORDS (click area to edit)</div>
+              {areas.map(a => (
+                <div key={a.id} style={{ marginBottom:6 }}>
+                  <span style={{ fontSize:11, color:a.color, fontWeight:600, marginRight:8 }}>{a.name}:</span>
+                  <input value={(a.keywords || []).join(", ")} onChange={e => update("areas", prev => prev.map(x => x.id === a.id ? { ...x, keywords: e.target.value.split(",").map(k => k.trim()).filter(Boolean) } : x))} placeholder="keyword1, keyword2, ..." style={{ fontSize:11, padding:"4px 8px", borderRadius:2, border:"1px solid var(--hairline)", background:"var(--elevated)", color:"var(--text)", fontFamily:"var(--font-mono)", width:300 }} />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ background:"var(--surface)", borderRadius:2, border:"1px solid var(--hairline)", padding:"24px", maxWidth:550 }}>
+            <div style={{ fontSize:14, fontWeight:700, marginBottom:12 }}>💾 Data</div>
+            <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+              <Btn small outline color="var(--cyan)" onClick={() => {
+                const d = JSON.stringify(data, null, 2);
+                const b = new Blob([d], { type:"application/json" });
+                const u = URL.createObjectURL(b);
+                const a = document.createElement("a");
+                a.href = u; a.download = "synapse-backup-" + new Date().toISOString().slice(0,10) + ".json"; a.click();
+              }}>Export Backup</Btn>
+              <Btn small outline color="var(--cyan)" onClick={() => {
+                const inp = document.createElement("input");
+                inp.type = "file"; inp.accept = ".json";
+                inp.onchange = (e) => {
+                  const reader = new FileReader();
+                  reader.onload = (ev) => {
+                    try {
+                      const imported = JSON.parse(ev.target.result);
+                      setData(imported);
+                      setToast({ message: "Data imported successfully", type: "success" });
+                    } catch(err) { setToast({ message: "Invalid file", type: "error" }); }
+                  };
+                  reader.readAsText(e.target.files[0]);
+                };
+                inp.click();
+              }}>Import Backup</Btn>
+              <Btn small outline color="var(--magenta)" onClick={() => { if (confirm("Wipe all data? This cannot be undone.")) { localStorage.removeItem(STORAGE_KEY); localStorage.removeItem("synapse-digest"); location.reload(); } }}>Wipe Data</Btn>
+            </div>
           </div>
         </>}
       </div>
 
-      {panel&&<DetailPanel type={panel.type} item={panel.item} onClose={()=>setPanel(null)} onSave={panel.type==="project"?sP:sT} onDelete={panel.type==="project"?dP:dT} tasks={T} projects={P} onSaveTask={sT} onDeleteTask={dT} onAddTask={aT} onOpenTask={t=>setPanel({type:"task",item:t})}/>}
+      {/* TIMELINE SPINE */}
+      <TimelineSpine notes={notes} onSelect={(n) => { setView("notes"); }} />
+
+      {/* DETAIL PANEL */}
+      {panel && <DetailPanel
+        type={panel.type}
+        item={panel.item}
+        areas={areas}
+        onClose={() => setPanel(null)}
+        onSave={panel.type === "project" ? saveProject : saveTask}
+        onDelete={panel.type === "project" ? deleteProject : deleteTask}
+        tasks={tasks}
+        projects={projects}
+        onSaveTask={saveTask}
+        onDeleteTask={deleteTask}
+        onAddTask={addTask}
+        onOpenTask={(t) => setPanel({ type:"task", item: t })}
+      />}
     </div>
   );
 }
-
-
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 </script>
