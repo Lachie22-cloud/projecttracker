@@ -59,6 +59,8 @@ const { useState, useEffect, useCallback, useMemo, useRef } = React;
 // ============================================================
 const STORAGE_KEY = "pcc-v9-synapse";
 const API_KEY_KEY = "synapse-api-key";
+const PROXY_KEY = "synapse-proxy-url";
+function getProxyUrl() { return (localStorage.getItem(PROXY_KEY) || "").trim() || "https://api.anthropic.com"; }
 
 // Migrate key from old app
 (() => {
@@ -169,7 +171,7 @@ async function aiParseCapture(rawText, areas, projects, recentNotes) {
   const recentCtx = (recentNotes || []).slice(0, 5).map(n => n.rawText.slice(0, 100)).join("\n");
 
   try {
-    const r = await fetch("https://api.anthropic.com/v1/messages", {
+    const r = await fetch(getProxyUrl() + "/v1/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-dangerous-direct-browser-access": "true" },
       body: JSON.stringify({
@@ -223,7 +225,7 @@ async function aiDigest(tasks, projects, areas) {
   }).join("\n");
 
   try {
-    const r = await fetch("https://api.anthropic.com/v1/messages", {
+    const r = await fetch(getProxyUrl() + "/v1/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-dangerous-direct-browser-access": "true" },
       body: JSON.stringify({
@@ -271,7 +273,7 @@ async function aiProposeProjects(notes, areas) {
   const areaCtx = areas.map(a => `${a.name}(id:${a.id})`).join(", ");
 
   try {
-    const r = await fetch("https://api.anthropic.com/v1/messages", {
+    const r = await fetch(getProxyUrl() + "/v1/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-dangerous-direct-browser-access": "true" },
       body: JSON.stringify({
@@ -547,9 +549,11 @@ function App() {
   const [searchQ, setSearchQ] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [apiKeyVal, setApiKeyVal] = useState(localStorage.getItem(API_KEY_KEY) || "");
+  const [proxyVal, setProxyVal] = useState(localStorage.getItem(PROXY_KEY) || "");
   const [testResult, setTestResult] = useState(null);
   const [testing, setTesting] = useState(false);
   const saveKey = (v) => { const clean = v.trim(); setApiKeyVal(clean); localStorage.setItem(API_KEY_KEY, clean); };
+  const saveProxy = (v) => { setProxyVal(v); localStorage.setItem(PROXY_KEY, v.trim()); };
 
   // Persistence
   useEffect(() => { saveData(data); }, [data]);
@@ -1135,7 +1139,7 @@ function App() {
                 if (!key) { setTestResult({ ok:false, msg:"No API key entered" }); return; }
                 setTesting(true); setTestResult(null);
                 try {
-                  const r = await fetch("https://api.anthropic.com/v1/messages", {
+                  const r = await fetch(getProxyUrl() + "/v1/messages", {
                     method: "POST",
                     headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-dangerous-direct-browser-access": "true" },
                     body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 10, messages: [{ role: "user", content: "Say OK" }] })
@@ -1151,6 +1155,15 @@ function App() {
               <button onClick={() => { saveKey(""); setTestResult(null); }} style={{ padding:"6px 14px", borderRadius:2, border:"1px solid var(--hairline)", background:"transparent", color:"var(--muted)", fontSize:11, cursor:"pointer", fontFamily:"var(--font-mono)" }}>Clear</button>
             </div>
             {testResult && <div style={{ marginTop:8, padding:"8px 12px", borderRadius:2, border:`1px solid ${testResult.ok ? "var(--success)" : "var(--magenta)"}40`, background: testResult.ok ? "rgba(61,255,184,0.05)" : "rgba(255,46,147,0.05)", fontSize:11, fontFamily:"var(--font-mono)", color: testResult.ok ? "var(--success)" : "var(--magenta)", lineHeight:1.5 }}>{testResult.ok ? "✓" : "✕"} {testResult.msg}</div>}
+          </div>
+
+          <div style={{ background:"var(--surface)", borderRadius:2, border:"1px solid var(--hairline)", padding:"24px", maxWidth:550, marginBottom:16 }}>
+            <div style={{ fontSize:14, fontWeight:700, marginBottom:4 }}>🌐 API Proxy URL</div>
+            <div style={{ fontSize:12, color:"var(--muted)", marginBottom:12 }}>If your network blocks api.anthropic.com, deploy a Cloudflare Worker proxy and paste its URL here.</div>
+            <input type="text" value={proxyVal} onChange={e => saveProxy(e.target.value)} placeholder="https://api.anthropic.com (default)" style={{ width:"100%", padding:"10px 14px", borderRadius:2, border:"1px solid var(--hairline)", fontSize:13, boxSizing:"border-box", fontFamily:"var(--font-mono)", background:"var(--elevated)", color:"var(--text)" }} />
+            <div style={{ fontSize:10, color:"var(--muted)", fontFamily:"var(--font-mono)", marginTop:6 }}>
+              Using: {getProxyUrl()}
+            </div>
           </div>
 
           <div style={{ background:"var(--surface)", borderRadius:2, border:"1px solid var(--hairline)", padding:"24px", maxWidth:550, marginBottom:16 }}>
