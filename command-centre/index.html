@@ -60,6 +60,14 @@ const { useState, useEffect, useCallback, useMemo, useRef } = React;
 const STORAGE_KEY = "pcc-v9-synapse";
 const API_KEY_KEY = "synapse-api-key";
 
+// Migrate key from old app
+(() => {
+  if (!localStorage.getItem(API_KEY_KEY)) {
+    const old = localStorage.getItem("pcc-api-key");
+    if (old) { localStorage.setItem(API_KEY_KEY, old); }
+  }
+})();
+
 function uid() { return "id_" + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
 function now() { return new Date().toISOString(); }
 function touchNow(item) { return { ...item, touchedAt: now(), updatedAt: now() }; }
@@ -156,7 +164,7 @@ async function aiParseCapture(rawText, areas, projects, recentNotes) {
   try {
     const r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-dangerous-direct-browser-access": "true" },
+      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
         max_tokens: 2000,
@@ -185,9 +193,9 @@ ${rawText}` }]
       })
     });
     const d = await r.json();
-    if (d.error) throw new Error(d.error.message);
+    if (d.error) throw new Error(d.error.message || JSON.stringify(d.error));
     return JSON.parse((d.content?.[0]?.text || "{}").replace(/```json|```/g, "").trim());
-  } catch (e) { console.error("AI parse error:", e); return null; }
+  } catch (e) { console.error("AI parse error:", e); window._lastAiError = e.message; return null; }
 }
 
 async function aiDigest(tasks, projects, areas) {
@@ -210,7 +218,7 @@ async function aiDigest(tasks, projects, areas) {
   try {
     const r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-dangerous-direct-browser-access": "true" },
+      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
         max_tokens: 1500,
@@ -241,9 +249,9 @@ Return ONLY valid JSON (no markdown):
       })
     });
     const d = await r.json();
-    if (d.error) throw new Error(d.error.message);
+    if (d.error) throw new Error(d.error.message || JSON.stringify(d.error));
     return JSON.parse((d.content?.[0]?.text || "{}").replace(/```json|```/g, "").trim());
-  } catch (e) { console.error("AI digest error:", e); return null; }
+  } catch (e) { console.error("AI digest error:", e); window._lastAiError = e.message; return null; }
 }
 
 async function aiProposeProjects(notes, areas) {
@@ -258,7 +266,7 @@ async function aiProposeProjects(notes, areas) {
   try {
     const r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-dangerous-direct-browser-access": "true" },
+      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
         max_tokens: 1000,
@@ -585,7 +593,7 @@ function App() {
     if (result && result.tasks && result.tasks.length > 0) {
       setReview(result);
     } else if (!result) {
-      setToast({ message: "AI unavailable — note saved as raw dump", type: "warning" });
+      setToast({ message: "AI error: " + (window._lastAiError || "unavailable") + " — note saved as raw dump", type: "warning" });
     } else {
       setToast({ message: "No tasks extracted — note saved", type: "info" });
     }
