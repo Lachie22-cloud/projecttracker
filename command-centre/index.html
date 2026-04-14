@@ -1122,7 +1122,23 @@ function App() {
             <div style={{ fontSize:14, fontWeight:700, marginBottom:4 }}>🤖 Anthropic API Key</div>
             <div style={{ fontSize:12, color:"var(--muted)", marginBottom:12 }}>Get your key from <a href="https://console.anthropic.com/settings/keys" target="_blank" style={{ color:"var(--cyan)" }}>console.anthropic.com</a></div>
             <input type="password" defaultValue={localStorage.getItem(API_KEY_KEY) || ""} onChange={e => localStorage.setItem(API_KEY_KEY, e.target.value.trim())} placeholder="sk-ant-api03-..." style={{ width:"100%", padding:"10px 14px", borderRadius:2, border:"1px solid var(--hairline)", fontSize:13, boxSizing:"border-box", fontFamily:"var(--font-mono)", background:"var(--elevated)", color:"var(--text)" }} />
-            <div style={{ fontSize:10, color:"var(--muted)", marginTop:6, fontFamily:"var(--font-mono)" }}>Stored in your browser only</div>
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:8 }}>
+              <div style={{ fontSize:10, color:"var(--muted)", fontFamily:"var(--font-mono)" }}>Stored in your browser only {getApiKey() ? `(${getApiKey().length} chars, starts: ${getApiKey().slice(0,10)}...)` : "(empty)"}</div>
+              <button onClick={async () => {
+                const key = getApiKey();
+                if (!key) { setToast({ message: "No API key set", type: "error" }); return; }
+                try {
+                  const r = await fetch("https://api.anthropic.com/v1/messages", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-dangerous-direct-browser-access": "true" },
+                    body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 10, messages: [{ role: "user", content: "Say OK" }] })
+                  });
+                  const d = await r.json();
+                  if (d.error) setToast({ message: "API error: " + (d.error.message || JSON.stringify(d.error)), type: "error" });
+                  else setToast({ message: "API key works!", type: "success" });
+                } catch(e) { setToast({ message: "Connection failed: " + e.message, type: "error" }); }
+              }} style={{ padding:"4px 10px", borderRadius:2, border:"1px solid var(--cyan)40", background:"transparent", color:"var(--cyan)", fontSize:10, fontWeight:600, cursor:"pointer", fontFamily:"var(--font-mono)" }}>Test Key</button>
+            </div>
           </div>
 
           <div style={{ background:"var(--surface)", borderRadius:2, border:"1px solid var(--hairline)", padding:"24px", maxWidth:550, marginBottom:16 }}>
