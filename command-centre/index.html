@@ -5,69 +5,42 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Synapse</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◆</text></svg>">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #09090b;
-    --surface: #0f0f12;
-    --card: #141418;
-    --card-hover: #1a1a20;
-    --border: rgba(255,255,255,0.06);
-    --border-active: rgba(255,255,255,0.12);
+    --bg: #000000;
+    --surface: #0a0a0a;
+    --card: #111111;
+    --card-hover: #171717;
+    --border: #1f1f1f;
+    --border-hover: #333;
     --accent: #d4a853;
-    --accent-soft: rgba(212,168,83,0.10);
-    --accent-glow: rgba(212,168,83,0.04);
-    --green: #34d399;
-    --yellow: #fbbf24;
-    --red: #f87171;
-    --blue: #60a5fa;
-    --purple: #a78bfa;
-    --text: #e4e4e7;
-    --text-secondary: #71717a;
-    --text-dim: #3f3f46;
-    --radius: 10px;
-    --font: 'Inter', -apple-system, sans-serif;
-    --mono: 'JetBrains Mono', 'SF Mono', monospace;
+    --accent-dim: rgba(212,168,83,0.15);
+    --green: #50e3c2;
+    --yellow: #f5a623;
+    --red: #ee5a5a;
+    --blue: #0070f3;
+    --purple: #8a63d2;
+    --text: #ededed;
+    --text-secondary: #888;
+    --text-dim: #444;
+    --radius: 8px;
+    --font: 'Inter', -apple-system, system-ui, sans-serif;
+    --mono: 'Geist Mono', 'JetBrains Mono', monospace;
   }
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family: var(--mono); background: var(--bg); color: var(--text); overflow: hidden; font-size: 13px; }
+  body { font-family: var(--font); background: var(--bg); color: var(--text); overflow: hidden; font-size: 14px; -webkit-font-smoothing: antialiased; }
   #root { min-height: 100vh; }
 
-  /* Dot grid background */
-  .dot-bg {
-    background-image: radial-gradient(circle, rgba(255,255,255,0.03) 1px, transparent 1px);
-    background-size: 24px 24px;
-  }
-
-  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar { width: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.04); border-radius: 2px; }
-  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.08); }
+  ::-webkit-scrollbar-thumb { background: #222; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #333; }
   ::selection { background: rgba(212,168,83,0.2); }
-  input, textarea, select, button { font-family: inherit; font-size: inherit; }
-  input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.5); }
-  a { color: var(--accent); text-decoration: none; }
-
-  /* Hover transitions */
-  .hoverable { transition: background 0.15s, border-color 0.15s, transform 0.1s; }
-  .hoverable:hover { background: var(--card-hover); border-color: var(--border-active); }
-
-  /* Subtle glow on active nav */
-  .nav-active { position: relative; }
-  .nav-active::before {
-    content: '';
-    position: absolute;
-    left: 0; top: 50%; transform: translateY(-50%);
-    width: 2px; height: 16px;
-    background: var(--accent);
-    border-radius: 0 2px 2px 0;
-  }
-
-  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
-  .fade-in { animation: fadeIn 0.2s ease-out; }
-
-  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
-  .pulse { animation: pulse 2s ease-in-out infinite; }
+  input, textarea, select, button { font-family: inherit; }
+  input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.7); }
+  a { color: var(--blue); text-decoration: none; }
+  a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -78,9 +51,6 @@
 <script type="text/babel">
 const { useState, useEffect, useCallback, useMemo, useRef } = React;
 
-// ============================================================
-// CONSTANTS
-// ============================================================
 const STORAGE_KEY = "pcc-v9-synapse";
 const API_KEY_KEY = "synapse-api-key";
 const PROXY_KEY = "synapse-proxy-url";
@@ -95,15 +65,6 @@ function isForgotten(item, n=7) { return item.status !== "Complete" && daysSince
 function fmt(ts) { if (!ts) return ""; return new Date(ts).toLocaleDateString("en-AU",{day:"numeric",month:"short"}); }
 function fmtTime(ts) { if (!ts) return ""; return new Date(ts).toLocaleTimeString("en-AU",{hour:"2-digit",minute:"2-digit",hour12:false}); }
 function fmtFull(ts) { if (!ts) return ""; return fmt(ts) + " " + fmtTime(ts); }
-function relTime(ts) {
-  if (!ts) return "";
-  const d = daysSince(ts);
-  if (d === 0) return "today";
-  if (d === 1) return "yesterday";
-  if (d < 7) return d + "d ago";
-  if (d < 30) return Math.floor(d/7) + "w ago";
-  return Math.floor(d/30) + "mo ago";
-}
 
 function getNextDue(due, recurrence) {
   if (!due || !recurrence) return null;
@@ -116,8 +77,8 @@ function getNextDue(due, recurrence) {
 }
 function getRecurrenceLabel(rec) {
   if (!rec) return null;
-  if (rec === "daily") return "daily"; if (rec === "weekly") return "weekly"; if (rec === "monthly") return "monthly";
-  if (rec?.type === "custom") return "every " + rec.days + "d"; return null;
+  if (rec === "daily") return "Daily"; if (rec === "weekly") return "Weekly"; if (rec === "monthly") return "Monthly";
+  if (rec?.type === "custom") return "Every " + rec.days + "d"; return null;
 }
 function generateGhostDates(due, recurrence, endDate, limit) {
   if (!due || !recurrence) return [];
@@ -127,19 +88,18 @@ function generateGhostDates(due, recurrence, endDate, limit) {
 }
 
 const STATUSES = ["Not Started","In Progress","On Hold","Complete"];
-const SC = {"Not Started":"#3f3f46","In Progress":"#60a5fa","On Hold":"#fbbf24","Complete":"#34d399"};
+const SC = {"Not Started":"#444","In Progress":"#0070f3","On Hold":"#f5a623","Complete":"#50e3c2"};
 const PRIORITIES = ["Critical","High","Medium","Low"];
-const PC = {Critical:"#f87171",High:"#fb923c",Medium:"#fbbf24",Low:"#71717a"};
+const PC = {Critical:"#ee5a5a",High:"#f5a623",Medium:"#f5a623",Low:"#666"};
 const EFFORTS = ["S","M","L","XL"];
-const EC = {S:"#34d399",M:"#60a5fa",L:"#fbbf24",XL:"#f87171"};
+const EC = {S:"#50e3c2",M:"#0070f3",L:"#f5a623",XL:"#ee5a5a"};
 
 const DEFAULT_AREAS = [
-  { id:"work", name:"Work", color:"#60a5fa", icon:"W", keywords:["meeting","report","email","slides","review","deadline"], userCreated:false },
+  { id:"work", name:"Work", color:"#0070f3", icon:"W", keywords:["meeting","report","email","slides","review","deadline"], userCreated:false },
   { id:"personal", name:"Personal", color:"#d4a853", icon:"P", keywords:["home","errand","health","appointment","call"], userCreated:false },
-  { id:"ideas", name:"Ideas", color:"#a78bfa", icon:"I", keywords:["idea","think","explore","research","blog","write"], userCreated:false },
+  { id:"ideas", name:"Ideas", color:"#8a63d2", icon:"I", keywords:["idea","think","explore","research","blog","write"], userCreated:false },
 ];
-const AREA_SWATCHES = ["#d4a853","#60a5fa","#34d399","#fbbf24","#a78bfa","#fb923c","#22d3ee","#f472b6"];
-const AREA_ICONS = ["W","P","I","D","R","H","S","C","L","X"];
+const AREA_SWATCHES = ["#d4a853","#0070f3","#50e3c2","#f5a623","#8a63d2","#ee5a5a","#f472b6","#22d3ee"];
 
 // ============================================================
 // DATA
@@ -204,96 +164,103 @@ async function aiProposeProjects(notes, areas) {
 }
 
 // ============================================================
+// ICONS (SVG inline — Vercel style)
+// ============================================================
+const Icons = {
+  capture: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>,
+  stream: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M12 20V10M6 20V4M18 20v-6"/></svg>,
+  notes: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>,
+  tasks: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>,
+  projects: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>,
+  board: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>,
+  calendar: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>,
+  dashboard: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>,
+  digest: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>,
+  inbox: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M22 12h-6l-2 3H10l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>,
+  settings: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>,
+  search: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>,
+  chevron: () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M9 18l6-6-6-6"/></svg>,
+};
+
+// ============================================================
 // UI PRIMITIVES
 // ============================================================
-const Card = ({children, style={}, hover=false, onClick}) => (
-  <div className={hover ? "hoverable" : ""} onClick={onClick} style={{
-    background:"var(--card)", border:"1px solid var(--border)", borderRadius:"var(--radius)",
-    padding:16, cursor: onClick ? "pointer" : "default", ...style
-  }}>{children}</div>
-);
-
-const Tag = ({children, color="var(--text-dim)", style={}}) => (
-  <span style={{
-    display:"inline-flex",alignItems:"center",gap:3,padding:"2px 7px",
-    borderRadius:4,fontSize:11,fontWeight:500,color,
-    border:`1px solid ${color}25`,background:`${color}08`,
-    letterSpacing:"0.02em",whiteSpace:"nowrap",...style
-  }}>{children}</span>
-);
-
-function Btn({children,onClick,variant="primary",small,disabled,style={}}) {
-  const base = {padding:small?"4px 10px":"7px 14px",borderRadius:6,fontSize:12,fontWeight:500,cursor:disabled?"not-allowed":"pointer",opacity:disabled?0.4:1,transition:"all 0.15s",letterSpacing:"0.01em"};
+function Btn({children,onClick,variant="primary",size="sm",disabled,style={}}) {
+  const base = {borderRadius:6,fontWeight:500,cursor:disabled?"not-allowed":"pointer",opacity:disabled?0.5:1,transition:"all 0.15s",display:"inline-flex",alignItems:"center",gap:6,whiteSpace:"nowrap",fontSize:13};
+  const sizes = {sm:{padding:"6px 12px",fontSize:13},xs:{padding:"4px 8px",fontSize:12}};
   const variants = {
-    primary: {background:"var(--accent)",color:"#000",border:"none",fontWeight:600},
+    primary: {background:"#fff",color:"#000",border:"1px solid #fff"},
     secondary: {background:"transparent",color:"var(--text-secondary)",border:"1px solid var(--border)"},
-    danger: {background:"transparent",color:"var(--red)",border:"1px solid rgba(248,113,113,0.2)"},
-    ghost: {background:"transparent",color:"var(--text-secondary)",border:"none",padding:small?"4px 6px":"7px 10px"},
+    danger: {background:"transparent",color:"var(--red)",border:"1px solid #331a1a"},
+    ghost: {background:"transparent",color:"var(--text-secondary)",border:"1px solid transparent",padding:"4px 8px"},
   };
-  return <button onClick={onClick} disabled={disabled} style={{...base,...variants[variant],...style}}>{children}</button>;
+  return <button onClick={onClick} disabled={disabled} style={{...base,...sizes[size],...variants[variant],...style}}
+    onMouseEnter={e=>{if(!disabled&&variant==="secondary"){e.target.style.borderColor="var(--border-hover)";e.target.style.background="#111"}}}
+    onMouseLeave={e=>{if(variant==="secondary"){e.target.style.borderColor="var(--border)";e.target.style.background="transparent"}}}
+  >{children}</button>;
 }
 
-function NavItem({label,active,onClick,count,shortcut}) {
-  return <button onClick={onClick} className={active?"nav-active":""} style={{
-    display:"flex",alignItems:"center",gap:8,padding:"7px 12px 7px 14px",borderRadius:6,border:"none",
-    background:active?"var(--accent-soft)":"transparent",
-    color:active?"var(--accent)":"var(--text-secondary)",
-    fontSize:12,fontWeight:active?500:400,cursor:"pointer",width:"100%",textAlign:"left",
-    transition:"all 0.12s",position:"relative",letterSpacing:"0.02em"
-  }}>
+const Badge = ({children, color="var(--text-dim)", dot, style={}}) => (
+  <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 8px",borderRadius:99,fontSize:12,color:color,border:`1px solid ${color}22`,whiteSpace:"nowrap",...style}}>
+    {dot&&<span style={{width:6,height:6,borderRadius:"50%",background:color}}/>}{children}
+  </span>
+);
+
+function NavItem({icon:Icon,label,active,onClick,count}) {
+  return <button onClick={onClick} style={{
+    display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:6,border:"none",
+    background:active?"#1a1a1a":"transparent",
+    color:active?"#fff":"var(--text-secondary)",
+    fontSize:13,fontWeight:active?500:400,cursor:"pointer",width:"100%",textAlign:"left",
+    transition:"all 0.1s"
+  }}
+    onMouseEnter={e=>{if(!active)e.target.style.background="#111"}}
+    onMouseLeave={e=>{if(!active)e.target.style.background="transparent"}}
+  >
+    <span style={{opacity:active?1:0.5,display:"flex",alignItems:"center"}}>{Icon&&<Icon/>}</span>
     <span style={{flex:1}}>{label}</span>
-    {count>0&&<span style={{fontSize:10,color:active?"var(--accent)":"var(--text-dim)",opacity:0.8}}>{count}</span>}
-    {shortcut&&<span style={{fontSize:9,color:"var(--text-dim)",letterSpacing:"0.05em"}}>{shortcut}</span>}
+    {count>0&&<span style={{fontSize:11,color:"var(--text-dim)",background:"#1a1a1a",padding:"1px 6px",borderRadius:99,minWidth:18,textAlign:"center"}}>{count}</span>}
   </button>;
 }
 
 function Donut({size=100,stroke=10,segments,center,sub}) {
   const r=(size-stroke)/2, c=2*Math.PI*r; let offset=0;
   return <div style={{position:"relative",width:size,height:size}}>
-    <svg width={size} height={size} style={{transform:"rotate(-90deg)"}}><circle cx={size/2} cy={size/2} r={r} fill="none" stroke="var(--border)" strokeWidth={stroke}/>
+    <svg width={size} height={size} style={{transform:"rotate(-90deg)"}}><circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#1a1a1a" strokeWidth={stroke}/>
     {segments.map((s,i)=>{const dash=(s.pct/100)*c;const o=offset;offset+=dash;return <circle key={i} cx={size/2} cy={size/2} r={r} fill="none" stroke={s.color} strokeWidth={stroke} strokeDasharray={`${dash} ${c-dash}`} strokeDashoffset={-o} style={{transition:"all 0.5s"}}/>;})}</svg>
-    <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}><div style={{fontSize:size*0.18,fontWeight:700,fontFamily:"var(--font)"}}>{center}</div>{sub&&<div style={{fontSize:size*0.09,color:"var(--text-secondary)"}}>{sub}</div>}</div>
+    <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}><div style={{fontSize:size*0.2,fontWeight:700}}>{center}</div>{sub&&<div style={{fontSize:size*0.1,color:"var(--text-secondary)"}}>{sub}</div>}</div>
   </div>;
 }
 
 function Toast({message,type="info",onDismiss}) {
   const c = {info:"var(--blue)",error:"var(--red)",success:"var(--green)",warning:"var(--yellow)"};
   useEffect(()=>{const t=setTimeout(onDismiss,4000);return()=>clearTimeout(t)},[]);
-  return <div className="fade-in" style={{position:"fixed",bottom:36,right:16,background:"var(--card)",border:`1px solid ${c[type]}30`,padding:"8px 14px",borderRadius:8,fontSize:12,zIndex:9999,maxWidth:360,display:"flex",alignItems:"center",gap:8,color:"var(--text)",backdropFilter:"blur(12px)"}}>
-    <span style={{width:5,height:5,borderRadius:"50%",background:c[type],flexShrink:0}}/>{message}
+  return <div style={{position:"fixed",bottom:20,right:20,background:"var(--card)",border:`1px solid var(--border)`,padding:"10px 16px",borderRadius:8,fontSize:13,zIndex:9999,maxWidth:380,display:"flex",alignItems:"center",gap:8,color:"var(--text)",boxShadow:"0 4px 12px rgba(0,0,0,0.5)"}}>
+    <span style={{width:6,height:6,borderRadius:"50%",background:c[type],flexShrink:0}}/>{message}
   </div>;
 }
 
 // ============================================================
-// COMMAND LINE CAPTURE
+// CAPTURE MODAL
 // ============================================================
 function CaptureModal({onCommit,onClose}) {
   const [text,setText]=useState(""); const ref=useRef(null);
   useEffect(()=>{ref.current?.focus()},[]);
   const handleKey=(e)=>{ if((e.metaKey||e.ctrlKey)&&e.key==="Enter"){e.preventDefault();if(text.trim())onCommit(text.trim())} if(e.key==="Escape")onClose(); };
-  const lines = text.trim().split("\n").filter(l=>l.trim()).length;
-  return <div style={{position:"fixed",inset:0,zIndex:5000,display:"flex",alignItems:"flex-start",justifyContent:"center",paddingTop:"15vh",backdropFilter:"blur(20px)",background:"rgba(0,0,0,0.75)"}} onClick={onClose}>
-    <div className="fade-in" onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:600,margin:"0 20px"}}>
-      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-        <span style={{color:"var(--accent)",fontSize:13,fontWeight:600}}>~</span>
-        <span style={{color:"var(--text-dim)",fontSize:12}}>synapse capture</span>
-        <span style={{flex:1}}/>
-        <span style={{fontSize:10,color:"var(--text-dim)"}}>ctrl+enter commit / esc close</span>
+  return <div style={{position:"fixed",inset:0,zIndex:5000,display:"flex",alignItems:"flex-start",justifyContent:"center",paddingTop:"12vh",background:"rgba(0,0,0,0.8)",backdropFilter:"blur(8px)"}} onClick={onClose}>
+    <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:580,margin:"0 20px",background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,overflow:"hidden",boxShadow:"0 16px 48px rgba(0,0,0,0.6)"}}>
+      <div style={{padding:"14px 18px",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <span style={{fontSize:14,fontWeight:600}}>Mind Dump</span>
+        <span style={{fontSize:12,color:"var(--text-dim)",fontFamily:"var(--mono)"}}>Ctrl+Enter to commit</span>
       </div>
-      <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:8,overflow:"hidden"}}>
-        <div style={{display:"flex",alignItems:"center",gap:6,padding:"8px 14px",borderBottom:"1px solid var(--border)"}}>
-          <span style={{color:"var(--accent)",fontSize:12}}>{">"}</span>
-          <span style={{fontSize:11,color:"var(--text-dim)"}}>mind dump</span>
-        </div>
-        <textarea ref={ref} value={text} onChange={e=>setText(e.target.value)} onKeyDown={handleKey}
-          placeholder="what's on your mind..."
-          style={{width:"100%",minHeight:140,padding:"12px 14px",background:"transparent",border:"none",color:"var(--text)",fontSize:13,fontFamily:"var(--mono)",lineHeight:1.8,resize:"vertical",outline:"none",boxSizing:"border-box"}}/>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 14px",borderTop:"1px solid var(--border)",background:"var(--card)"}}>
-          <span style={{fontSize:11,color:"var(--text-dim)"}}>{lines} line{lines!==1?"s":""}</span>
-          <div style={{display:"flex",gap:4}}>
-            <Btn variant="ghost" small onClick={onClose}>cancel</Btn>
-            <Btn small onClick={()=>text.trim()&&onCommit(text.trim())} disabled={!text.trim()}>commit</Btn>
-          </div>
+      <textarea ref={ref} value={text} onChange={e=>setText(e.target.value)} onKeyDown={handleKey}
+        placeholder="What's on your mind..."
+        style={{width:"100%",minHeight:160,padding:"14px 18px",background:"transparent",border:"none",color:"var(--text)",fontSize:14,lineHeight:1.7,resize:"vertical",outline:"none",boxSizing:"border-box"}}/>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 18px",borderTop:"1px solid var(--border)"}}>
+        <span style={{fontSize:12,color:"var(--text-dim)",fontFamily:"var(--mono)"}}>{text.trim().split("\n").filter(l=>l.trim()).length} lines</span>
+        <div style={{display:"flex",gap:8}}>
+          <Btn variant="secondary" size="sm" onClick={onClose}>Cancel</Btn>
+          <Btn size="sm" onClick={()=>text.trim()&&onCommit(text.trim())} disabled={!text.trim()}>Commit</Btn>
         </div>
       </div>
     </div>
@@ -307,27 +274,21 @@ function ReviewCard({result,areas,onAccept,onDismiss}) {
   const [items,setItems]=useState((result.tasks||[]).map((t,i)=>({...t,_id:uid(),_selected:true})));
   const edit=(id,k,v)=>setItems(p=>p.map(x=>x._id===id?{...x,[k]:v}:x));
   const toggle=id=>setItems(p=>p.map(x=>x._id===id?{...x,_selected:!x._selected}:x));
-  return <div className="fade-in" style={{position:"fixed",bottom:28,left:220,right:0,zIndex:4000,background:"var(--surface)",borderTop:"1px solid var(--border)",padding:"14px 20px",maxHeight:"50vh",overflowY:"auto"}}>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-      <div>
-        <span style={{fontSize:12,fontWeight:600}}>extracted {items.length} tasks</span>
-        {result.summary&&<span style={{fontSize:11,color:"var(--text-secondary)",marginLeft:8}}>{result.summary}</span>}
-      </div>
-      <div style={{display:"flex",gap:4}}>
-        <Btn variant="ghost" small onClick={onDismiss}>discard</Btn>
-        <Btn small onClick={()=>onAccept(items.filter(i=>i._selected))}>accept ({items.filter(i=>i._selected).length})</Btn>
-      </div>
+  return <div style={{position:"fixed",bottom:0,left:240,right:0,zIndex:4000,background:"var(--surface)",borderTop:"1px solid var(--border)",padding:"16px 24px",maxHeight:"50vh",overflowY:"auto"}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+      <div style={{fontSize:14,fontWeight:600}}>Extracted {items.length} tasks {result.summary&&<span style={{fontWeight:400,color:"var(--text-secondary)",marginLeft:8}}>{result.summary}</span>}</div>
+      <div style={{display:"flex",gap:8}}><Btn variant="secondary" size="sm" onClick={onDismiss}>Discard</Btn><Btn size="sm" onClick={()=>onAccept(items.filter(i=>i._selected))}>Accept ({items.filter(i=>i._selected).length})</Btn></div>
     </div>
     {items.map(item=>{const area=areas.find(a=>a.id===item.areaId);const conf=item.confidence||0;
-      return <div key={item._id} className="hoverable" style={{display:"flex",gap:8,padding:"8px 10px",background:"var(--card)",border:`1px solid ${item._selected?"var(--accent)18":"var(--border)"}`,borderRadius:6,marginBottom:3,opacity:item._selected?1:0.35,transition:"all 0.15s"}}>
-        <button onClick={()=>toggle(item._id)} style={{width:16,height:16,borderRadius:3,border:`1.5px solid ${item._selected?"var(--accent)":"var(--text-dim)"}`,background:item._selected?"var(--accent)":"transparent",color:"#000",fontSize:9,cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",marginTop:1,fontWeight:700}}>{item._selected?"\u2713":""}</button>
+      return <div key={item._id} style={{display:"flex",gap:10,padding:"10px 12px",background:item._selected?"var(--card)":"transparent",border:`1px solid ${item._selected?"var(--border)":"transparent"}`,borderRadius:8,marginBottom:2,opacity:item._selected?1:0.35,transition:"all 0.15s"}}>
+        <button onClick={()=>toggle(item._id)} style={{width:18,height:18,borderRadius:4,border:`1.5px solid ${item._selected?"#fff":"#333"}`,background:item._selected?"#fff":"transparent",color:"#000",fontSize:10,cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",marginTop:1,fontWeight:700}}>{item._selected?"\u2713":""}</button>
         <div style={{flex:1}}>
-          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
-            <input value={item.name} onChange={e=>edit(item._id,"name",e.target.value)} style={{flex:1,fontSize:12,fontWeight:500,background:"transparent",border:"none",color:"var(--text)",outline:"none",fontFamily:"var(--mono)"}}/>
-            <span style={{width:5,height:5,borderRadius:"50%",background:conf>=0.8?"var(--green)":conf>=0.6?"var(--yellow)":"var(--red)"}} title={`${Math.round(conf*100)}%`}/>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+            <input value={item.name} onChange={e=>edit(item._id,"name",e.target.value)} style={{flex:1,fontSize:13,fontWeight:500,background:"transparent",border:"none",color:"var(--text)",outline:"none"}}/>
+            <span style={{width:6,height:6,borderRadius:"50%",background:conf>=0.8?"var(--green)":conf>=0.6?"var(--yellow)":"var(--red)"}} title={`${Math.round(conf*100)}%`}/>
           </div>
-          {item.sourceSpan&&<div style={{fontSize:10,color:"var(--text-dim)",marginBottom:3,fontStyle:"italic"}}>"{item.sourceSpan}"</div>}
-          <div style={{display:"flex",gap:3}}>{area&&<Tag color={area.color}>{area.name}</Tag>}<Tag color={PC[item.priority]}>{item.priority}</Tag>{item.due&&<Tag color="var(--text-secondary)">due {fmt(item.due)}</Tag>}</div>
+          {item.sourceSpan&&<div style={{fontSize:12,color:"var(--text-dim)",marginBottom:4}}>"{item.sourceSpan}"</div>}
+          <div style={{display:"flex",gap:4}}>{area&&<Badge color={area.color}>{area.name}</Badge>}<Badge color={PC[item.priority]}>{item.priority}</Badge>{item.due&&<Badge color="var(--text-secondary)">Due {fmt(item.due)}</Badge>}</div>
         </div>
       </div>;
     })}
@@ -347,42 +308,46 @@ function DetailPanel({type,item,areas,onClose,onSave,onDelete,tasks,projects,onS
   const prog=linked.length?Math.round((done/linked.length)*100):0;
   const parent=type==="task"&&f.projectId?(projects||[]).find(p=>p.id===f.projectId):null;
   const [adding,setAdding]=useState(false);const [nn,setNn]=useState("");
-  const inputStyle={width:"100%",padding:"6px 10px",borderRadius:6,border:"1px solid var(--border)",fontSize:12,background:"var(--surface)",color:"var(--text)",boxSizing:"border-box",fontFamily:"var(--mono)"};
+  const inputStyle={width:"100%",padding:"8px 12px",borderRadius:6,border:"1px solid var(--border)",fontSize:13,background:"var(--surface)",color:"var(--text)",boxSizing:"border-box",outline:"none"};
 
-  return <div className="fade-in" style={{position:"fixed",right:0,top:0,bottom:28,width:380,maxWidth:"95vw",background:"var(--surface)",zIndex:1000,display:"flex",flexDirection:"column",borderLeft:"1px solid var(--border)"}}>
-    <div style={{padding:"12px 16px",borderBottom:"1px solid var(--border)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-      <div style={{display:"flex",alignItems:"center",gap:6}}>
-        <span style={{width:8,height:8,borderRadius:2,background:area.color,flexShrink:0}}/>
-        <span style={{fontSize:11,color:"var(--text-secondary)"}}>{area.name} / {type}</span>
+  return <div style={{position:"fixed",right:0,top:0,bottom:0,width:400,maxWidth:"95vw",background:"var(--surface)",zIndex:1000,display:"flex",flexDirection:"column",borderLeft:"1px solid var(--border)",boxShadow:"-8px 0 24px rgba(0,0,0,0.4)"}}>
+    <div style={{padding:"16px 20px",borderBottom:"1px solid var(--border)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <span style={{width:8,height:8,borderRadius:"50%",background:area.color}}/>
+        <span style={{fontSize:13,color:"var(--text-secondary)"}}>{area.name}</span>
+        <span style={{color:"var(--text-dim)"}}>/</span>
+        <span style={{fontSize:13,color:"var(--text-secondary)",textTransform:"capitalize"}}>{type}</span>
       </div>
-      <button onClick={onClose} style={{background:"none",border:"none",color:"var(--text-dim)",cursor:"pointer",fontSize:12,padding:"2px 6px"}}>esc</button>
+      <button onClick={onClose} style={{background:"#1a1a1a",border:"1px solid var(--border)",width:28,height:28,borderRadius:6,cursor:"pointer",color:"var(--text-secondary)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>×</button>
     </div>
-    <div style={{padding:"12px 16px"}}><input value={f.name} onChange={e=>upd("name",e.target.value)} style={{width:"100%",fontSize:15,fontWeight:700,border:"none",background:"transparent",color:"var(--text)",outline:"none",fontFamily:"var(--font)",letterSpacing:"-0.02em"}}/></div>
-    <div style={{flex:1,overflowY:"auto",padding:"0 16px 16px"}}>
-      <div style={{display:"flex",gap:3,flexWrap:"wrap",marginBottom:14}}>{STATUSES.map(s=><button key={s} onClick={()=>upd("status",s)} style={{padding:"3px 10px",borderRadius:4,border:f.status===s?`1px solid ${SC[s]}`:"1px solid var(--border)",background:f.status===s?`${SC[s]}12`:"transparent",color:f.status===s?SC[s]:"var(--text-dim)",fontSize:11,cursor:"pointer",transition:"all 0.1s"}}>{s}</button>)}</div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:14}}>
-        <div><label style={{fontSize:10,color:"var(--text-dim)",marginBottom:3,display:"block",textTransform:"uppercase",letterSpacing:"0.05em"}}>Priority</label><div style={{display:"flex",gap:2}}>{PRIORITIES.map(p=><button key={p} onClick={()=>upd("priority",p)} style={{width:24,height:24,borderRadius:4,border:f.priority===p?`1px solid ${PC[p]}`:"1px solid var(--border)",background:f.priority===p?`${PC[p]}15`:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.1s"}} title={p}><span style={{width:6,height:6,borderRadius:"50%",background:PC[p]}}/></button>)}</div></div>
-        <div><label style={{fontSize:10,color:"var(--text-dim)",marginBottom:3,display:"block",textTransform:"uppercase",letterSpacing:"0.05em"}}>Effort</label><div style={{display:"flex",gap:2}}>{EFFORTS.map(e=><button key={e} onClick={()=>upd("effort",e)} style={{padding:"3px 7px",borderRadius:4,border:f.effort===e?`1px solid ${EC[e]}`:"1px solid var(--border)",background:f.effort===e?`${EC[e]}15`:"transparent",color:f.effort===e?EC[e]:"var(--text-dim)",fontSize:11,fontWeight:600,cursor:"pointer",transition:"all 0.1s"}}>{e}</button>)}</div></div>
-        <div><label style={{fontSize:10,color:"var(--text-dim)",marginBottom:3,display:"block",textTransform:"uppercase",letterSpacing:"0.05em"}}>Area</label><select value={f.areaId||""} onChange={e=>upd("areaId",e.target.value)} style={inputStyle}>{areas.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
-        <div><label style={{fontSize:10,color:"var(--text-dim)",marginBottom:3,display:"block",textTransform:"uppercase",letterSpacing:"0.05em"}}>Due</label><input type="date" value={f.due||""} onChange={e=>upd("due",e.target.value)} style={inputStyle}/></div>
-        <div><label style={{fontSize:10,color:"var(--text-dim)",marginBottom:3,display:"block",textTransform:"uppercase",letterSpacing:"0.05em"}}>Recurrence</label><select value={typeof f.recurrence==="object"?"custom":f.recurrence||"none"} onChange={e=>{const v=e.target.value;if(v==="none")upd("recurrence",null);else if(v==="custom")upd("recurrence",{type:"custom",days:14});else upd("recurrence",v)}} style={inputStyle}><option value="none">None</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="custom">Custom</option></select></div>
-        {f.recurrence&&typeof f.recurrence==="object"&&<div><label style={{fontSize:10,color:"var(--text-dim)",marginBottom:3,display:"block",textTransform:"uppercase",letterSpacing:"0.05em"}}>Every X days</label><input type="number" value={f.recurrence.days||14} onChange={e=>upd("recurrence",{type:"custom",days:Math.max(1,parseInt(e.target.value)||1)})} min={1} style={inputStyle}/></div>}
-        {type==="task"&&<div style={{gridColumn:"1/3"}}><label style={{fontSize:10,color:"var(--text-dim)",marginBottom:3,display:"block",textTransform:"uppercase",letterSpacing:"0.05em"}}>Project</label><select value={f.projectId||""} onChange={e=>upd("projectId",e.target.value||null)} style={inputStyle}><option value="">None</option>{(projects||[]).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>}
+    <div style={{padding:"16px 20px"}}><input value={f.name} onChange={e=>upd("name",e.target.value)} style={{width:"100%",fontSize:18,fontWeight:700,border:"none",background:"transparent",color:"var(--text)",outline:"none"}}/></div>
+    <div style={{flex:1,overflowY:"auto",padding:"0 20px 20px"}}>
+      <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:16}}>{STATUSES.map(s=><button key={s} onClick={()=>upd("status",s)} style={{padding:"5px 14px",borderRadius:99,border:f.status===s?`1px solid ${SC[s]}`:"1px solid var(--border)",background:f.status===s?`${SC[s]}12`:"transparent",color:f.status===s?SC[s]:"var(--text-dim)",fontSize:12,cursor:"pointer",transition:"all 0.1s"}}>{s}</button>)}</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
+        <div><label style={{fontSize:12,color:"var(--text-dim)",marginBottom:6,display:"block"}}>Priority</label><div style={{display:"flex",gap:3}}>{PRIORITIES.map(p=><button key={p} onClick={()=>upd("priority",p)} style={{flex:1,padding:"6px 0",borderRadius:6,border:f.priority===p?`1px solid ${PC[p]}`:"1px solid var(--border)",background:f.priority===p?`${PC[p]}12`:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.1s"}} title={p}><span style={{width:8,height:8,borderRadius:"50%",background:PC[p]}}/></button>)}</div></div>
+        <div><label style={{fontSize:12,color:"var(--text-dim)",marginBottom:6,display:"block"}}>Effort</label><div style={{display:"flex",gap:3}}>{EFFORTS.map(e=><button key={e} onClick={()=>upd("effort",e)} style={{flex:1,padding:"5px 0",borderRadius:6,border:f.effort===e?`1px solid ${EC[e]}`:"1px solid var(--border)",background:f.effort===e?`${EC[e]}12`:"transparent",color:f.effort===e?EC[e]:"var(--text-dim)",fontSize:12,fontWeight:600,cursor:"pointer",transition:"all 0.1s"}}>{e}</button>)}</div></div>
+        <div><label style={{fontSize:12,color:"var(--text-dim)",marginBottom:6,display:"block"}}>Area</label><select value={f.areaId||""} onChange={e=>upd("areaId",e.target.value)} style={inputStyle}>{areas.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+        <div><label style={{fontSize:12,color:"var(--text-dim)",marginBottom:6,display:"block"}}>Due Date</label><input type="date" value={f.due||""} onChange={e=>upd("due",e.target.value)} style={inputStyle}/></div>
+        <div><label style={{fontSize:12,color:"var(--text-dim)",marginBottom:6,display:"block"}}>Recurrence</label><select value={typeof f.recurrence==="object"?"custom":f.recurrence||"none"} onChange={e=>{const v=e.target.value;if(v==="none")upd("recurrence",null);else if(v==="custom")upd("recurrence",{type:"custom",days:14});else upd("recurrence",v)}} style={inputStyle}><option value="none">None</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="custom">Custom</option></select></div>
+        {f.recurrence&&typeof f.recurrence==="object"&&<div><label style={{fontSize:12,color:"var(--text-dim)",marginBottom:6,display:"block"}}>Every X days</label><input type="number" value={f.recurrence.days||14} onChange={e=>upd("recurrence",{type:"custom",days:Math.max(1,parseInt(e.target.value)||1)})} min={1} style={inputStyle}/></div>}
+        {type==="task"&&<div style={{gridColumn:"1/3"}}><label style={{fontSize:12,color:"var(--text-dim)",marginBottom:6,display:"block"}}>Project</label><select value={f.projectId||""} onChange={e=>upd("projectId",e.target.value||null)} style={inputStyle}><option value="">None</option>{(projects||[]).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>}
       </div>
-      {type==="task"&&parent&&<div style={{marginBottom:14,padding:"8px 10px",background:"var(--surface)",border:"1px solid var(--border)",borderRadius:6}}><span style={{fontSize:10,color:"var(--text-dim)",textTransform:"uppercase",letterSpacing:"0.05em"}}>project</span><div style={{fontSize:12,fontWeight:500,marginTop:2}}>{parent.name}</div></div>}
-      {type==="project"&&linked.length>0&&<div style={{marginBottom:14,display:"flex",alignItems:"center",gap:10}}><Donut size={48} stroke={5} center={`${prog}%`} segments={[{pct:prog,color:area.color}]}/><div><div style={{fontSize:16,fontWeight:700,fontFamily:"var(--font)"}}>{done}<span style={{fontSize:11,color:"var(--text-secondary)"}}>/{linked.length}</span></div><div style={{fontSize:10,color:"var(--text-secondary)"}}>complete</div></div></div>}
-      <div style={{marginBottom:14}}><label style={{fontSize:10,color:"var(--text-dim)",marginBottom:3,display:"block",textTransform:"uppercase",letterSpacing:"0.05em"}}>Notes</label><textarea value={f.notes||""} onChange={e=>upd("notes",e.target.value)} placeholder="..." rows={3} style={{...inputStyle,lineHeight:1.6,resize:"vertical"}}/></div>
+      {type==="task"&&parent&&<div style={{marginBottom:16,padding:"10px 12px",background:"var(--card)",border:"1px solid var(--border)",borderRadius:8}}><div style={{fontSize:11,color:"var(--text-dim)",textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:2}}>Parent Project</div><div style={{fontSize:14,fontWeight:600}}>{parent.name}</div></div>}
+      {type==="project"&&linked.length>0&&<div style={{marginBottom:16,display:"flex",alignItems:"center",gap:14}}><Donut size={56} stroke={6} center={`${prog}%`} segments={[{pct:prog,color:area.color}]}/><div><div style={{fontSize:20,fontWeight:700}}>{done}<span style={{fontSize:13,color:"var(--text-secondary)"}}>/{linked.length}</span></div><div style={{fontSize:12,color:"var(--text-secondary)"}}>tasks complete</div></div></div>}
+      <div style={{marginBottom:16}}><label style={{fontSize:12,color:"var(--text-dim)",marginBottom:6,display:"block"}}>Notes</label><textarea value={f.notes||""} onChange={e=>upd("notes",e.target.value)} placeholder="Add notes..." rows={3} style={{...inputStyle,lineHeight:1.6,resize:"vertical"}}/></div>
       {type==="project"&&<div>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}><span style={{fontSize:11,fontWeight:600}}>tasks ({linked.length})</span><Btn variant="ghost" small onClick={()=>setAdding(true)}>+ add</Btn></div>
-        {adding&&<div style={{display:"flex",gap:3,marginBottom:6}}><input value={nn} onChange={e=>setNn(e.target.value)} placeholder="task name..." autoFocus onKeyDown={e=>{if(e.key==="Enter"&&nn.trim()){onAddTask({name:nn.trim(),projectId:f.id,areaId:f.areaId,status:"Not Started",priority:"Medium",effort:"M",due:"",notes:"",createdAt:now(),updatedAt:now(),touchedAt:now(),recurrence:null});setNn("");setAdding(false)}}} style={{...inputStyle,flex:1}}/><Btn small onClick={()=>{if(nn.trim()){onAddTask({name:nn.trim(),projectId:f.id,areaId:f.areaId,status:"Not Started",priority:"Medium",effort:"M",due:"",notes:"",createdAt:now(),updatedAt:now(),touchedAt:now(),recurrence:null});setNn("");setAdding(false)}}}>add</Btn></div>}
-        {linked.sort((a,b)=>a.status==="Complete"?1:b.status==="Complete"?-1:0).map(t=><div key={t.id} className="hoverable" style={{display:"flex",alignItems:"center",gap:6,padding:"6px 8px",borderRadius:6,background:"var(--card)",border:"1px solid var(--border)",marginBottom:2}}>
-          <button onClick={()=>{const i=STATUSES.indexOf(t.status);onSaveTask(touchNow({...t,status:STATUSES[(i+1)%STATUSES.length]}))}} style={{width:14,height:14,borderRadius:3,border:`1.5px solid ${SC[t.status]}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,cursor:"pointer",background:t.status==="Complete"?SC[t.status]:"transparent",color:"#000",fontWeight:700}}>{t.status==="Complete"?"\u2713":""}</button>
-          <div style={{flex:1,cursor:"pointer"}} onClick={()=>onOpenTask(t)}><div style={{fontSize:11,fontWeight:500,textDecoration:t.status==="Complete"?"line-through":"none",color:t.status==="Complete"?"var(--text-dim)":"var(--text)"}}>{t.name}</div></div>
-          <span style={{width:5,height:5,borderRadius:"50%",background:PC[t.priority]}} title={t.priority}/>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><span style={{fontSize:13,fontWeight:600}}>Tasks ({linked.length})</span><Btn variant="ghost" size="xs" onClick={()=>setAdding(true)}>+ Add</Btn></div>
+        {adding&&<div style={{display:"flex",gap:6,marginBottom:8}}><input value={nn} onChange={e=>setNn(e.target.value)} placeholder="Task name..." autoFocus onKeyDown={e=>{if(e.key==="Enter"&&nn.trim()){onAddTask({name:nn.trim(),projectId:f.id,areaId:f.areaId,status:"Not Started",priority:"Medium",effort:"M",due:"",notes:"",createdAt:now(),updatedAt:now(),touchedAt:now(),recurrence:null});setNn("");setAdding(false)}}} style={{...inputStyle,flex:1}}/><Btn size="sm" onClick={()=>{if(nn.trim()){onAddTask({name:nn.trim(),projectId:f.id,areaId:f.areaId,status:"Not Started",priority:"Medium",effort:"M",due:"",notes:"",createdAt:now(),updatedAt:now(),touchedAt:now(),recurrence:null});setNn("");setAdding(false)}}}>Add</Btn></div>}
+        {linked.sort((a,b)=>a.status==="Complete"?1:b.status==="Complete"?-1:0).map(t=><div key={t.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",borderRadius:6,marginBottom:2,transition:"background 0.1s",cursor:"pointer"}}
+          onMouseEnter={e=>e.currentTarget.style.background="var(--card)"}
+          onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+          <button onClick={()=>{const i=STATUSES.indexOf(t.status);onSaveTask(touchNow({...t,status:STATUSES[(i+1)%STATUSES.length]}))}} style={{width:16,height:16,borderRadius:4,border:`1.5px solid ${SC[t.status]}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,cursor:"pointer",background:t.status==="Complete"?SC[t.status]:"transparent",color:"#000",fontWeight:700}}>{t.status==="Complete"?"\u2713":""}</button>
+          <div style={{flex:1}} onClick={()=>onOpenTask(t)}><div style={{fontSize:13,textDecoration:t.status==="Complete"?"line-through":"none",color:t.status==="Complete"?"var(--text-dim)":"var(--text)"}}>{t.name}</div></div>
+          <span style={{width:6,height:6,borderRadius:"50%",background:PC[t.priority]}} title={t.priority}/>
         </div>)}
       </div>}
     </div>
-    <div style={{padding:"10px 16px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"space-between"}}><Btn variant="danger" small onClick={()=>{onDelete(f.id);onClose()}}>delete</Btn><Btn variant="ghost" small onClick={onClose}>done</Btn></div>
+    <div style={{padding:"14px 20px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"space-between"}}><Btn variant="danger" size="sm" onClick={()=>{onDelete(f.id);onClose()}}>Delete</Btn><Btn variant="secondary" size="sm" onClick={onClose}>Done</Btn></div>
   </div>;
 }
 
@@ -406,7 +371,6 @@ function App() {
   const [proxyVal,setProxyVal]=useState(localStorage.getItem(PROXY_KEY)||"");
   const [testResult,setTestResult]=useState(null);
   const [testing,setTesting]=useState(false);
-  const [clock, setClock]=useState(new Date());
   const saveKey=v=>{const c=v.trim();setApiKeyVal(c);localStorage.setItem(API_KEY_KEY,c)};
   const saveProxy=v=>{setProxyVal(v);localStorage.setItem(PROXY_KEY,v.trim())};
 
@@ -414,9 +378,6 @@ function App() {
   const update=(key,fn)=>setData(prev=>({...prev,[key]:typeof fn==="function"?fn(prev[key]):fn}));
 
   useEffect(()=>{const h=e=>{if((e.metaKey||e.ctrlKey)&&e.key==="k"){e.preventDefault();setShowCapture(true)}};document.addEventListener("keydown",h);return()=>document.removeEventListener("keydown",h)},[]);
-
-  // Clock tick
-  useEffect(()=>{const t=setInterval(()=>setClock(new Date()),30000);return()=>clearInterval(t)},[]);
 
   useEffect(()=>{try{const c=localStorage.getItem("synapse-digest");if(c){const cb=JSON.parse(c);setBriefing(cb.data)}}catch(e){}},[]);
 
@@ -426,13 +387,13 @@ function App() {
     setShowCapture(false);
     const note={id:uid(),createdAt:now(),updatedAt:now(),touchedAt:now(),rawText,source:"capture",processed:false,extractedIds:[],areaIds:[]};
     update("notes",prev=>[note,...prev]);
-    setToast({message:"captured",type:"success"});
+    setToast({message:"Captured",type:"success"});
     setAiLoading(true);
     const result=await aiParseCapture(rawText,areas,projects,notes.slice(0,5));
     setAiLoading(false);
     if(result?.tasks?.length>0) setReview(result);
-    else if(!result) setToast({message:"ai error: "+(window._lastAiError||"unavailable"),type:"warning"});
-    else setToast({message:"no tasks extracted",type:"info"});
+    else if(!result) setToast({message:"AI error: "+(window._lastAiError||"unavailable"),type:"warning"});
+    else setToast({message:"No tasks extracted",type:"info"});
     if(getApiKey()){const props=await aiProposeProjects([note,...notes],areas);if(props?.length>0)update("proposals",prev=>[...props.map(p=>({...p,id:uid(),status:"pending",createdAt:now()})),...prev])}
   };
 
@@ -461,329 +422,330 @@ function App() {
   const forgottenCount=tasks.filter(t=>isForgotten(t)).length;
   const activeTasks=tasks.filter(t=>t.status!=="Complete").length;
   const todayStr=new Date().toISOString().slice(0,10);
-  const dueTodayCount=tasks.filter(t=>t.due===todayStr&&t.status!=="Complete").length;
 
-  const sectionTitle=(title,sub)=><div style={{marginBottom:16}}><h1 style={{fontSize:18,fontWeight:800,fontFamily:"var(--font)",letterSpacing:"-0.03em",color:"var(--text)"}}>{title}</h1>{sub&&<p style={{fontSize:12,color:"var(--text-dim)",marginTop:2}}>{sub}</p>}</div>;
+  const sectionTitle=(title,sub)=><div style={{marginBottom:24}}><h1 style={{fontSize:24,fontWeight:700,letterSpacing:"-0.5px"}}>{title}</h1>{sub&&<p style={{fontSize:14,color:"var(--text-secondary)",marginTop:4}}>{sub}</p>}</div>;
 
-  return <div style={{display:"flex",height:"100vh",flexDirection:"column",overflow:"hidden"}}>
-    <div style={{display:"flex",flex:1,overflow:"hidden"}}>
-    {panel&&<div onClick={()=>setPanel(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.3)",zIndex:999,backdropFilter:"blur(4px)"}}/>}
+  return <div style={{display:"flex",height:"100vh",overflow:"hidden"}}>
+    {panel&&<div onClick={()=>setPanel(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:999,backdropFilter:"blur(4px)"}}/>}
     {showCapture&&<CaptureModal onCommit={handleCapture} onClose={()=>setShowCapture(false)}/>}
     {review&&<ReviewCard result={review} areas={areas} onAccept={handleAcceptTasks} onDismiss={()=>setReview(null)}/>}
     {toast&&<Toast message={toast.message} type={toast.type} onDismiss={()=>setToast(null)}/>}
 
     {/* SIDEBAR */}
-    <div style={{width:220,background:"var(--surface)",borderRight:"1px solid var(--border)",padding:"12px 8px",display:"flex",flexDirection:"column",flexShrink:0,overflowY:"auto"}}>
-      {/* Logo */}
-      <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",marginBottom:16}}>
-        <div style={{width:24,height:24,borderRadius:4,background:"var(--accent)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800,color:"#000",fontFamily:"var(--font)"}}>S</div>
-        <div style={{fontSize:14,fontWeight:700,fontFamily:"var(--font)",letterSpacing:"-0.03em"}}>Synapse</div>
-        <span style={{fontSize:9,color:"var(--text-dim)",marginLeft:"auto"}}>v2</span>
+    <div style={{width:240,background:"var(--bg)",borderRight:"1px solid var(--border)",padding:"16px 12px",display:"flex",flexDirection:"column",flexShrink:0,overflowY:"auto"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,padding:"4px 8px",marginBottom:24}}>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" fill="var(--accent)"/><path d="M2 17l10 5 10-5" stroke="var(--accent)" strokeWidth="1.5" fill="none"/><path d="M2 12l10 5 10-5" stroke="var(--accent)" strokeWidth="1.5" fill="none"/></svg>
+        <span style={{fontSize:16,fontWeight:700,letterSpacing:"-0.5px"}}>Synapse</span>
       </div>
 
-      {/* Quick Capture */}
       <button onClick={()=>setShowCapture(true)} style={{
-        display:"flex",alignItems:"center",gap:6,padding:"7px 10px",borderRadius:6,
+        display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderRadius:8,
         border:"1px solid var(--border)",background:"var(--card)",
-        color:"var(--text-secondary)",fontSize:12,cursor:"pointer",width:"100%",textAlign:"left",
-        marginBottom:16,transition:"border-color 0.15s"
-      }}>
-        <span style={{color:"var(--accent)",fontWeight:600}}>{">"}_</span>
-        <span style={{flex:1}}>capture</span>
-        <span style={{fontSize:9,color:"var(--text-dim)"}}>ctrl+k</span>
+        color:"var(--text-secondary)",fontSize:13,cursor:"pointer",width:"100%",textAlign:"left",
+        marginBottom:20,transition:"border-color 0.15s"
+      }}
+        onMouseEnter={e=>{e.currentTarget.style.borderColor="var(--border-hover)"}}
+        onMouseLeave={e=>{e.currentTarget.style.borderColor="var(--border)"}}
+      >
+        <Icons.search/><span style={{flex:1,color:"var(--text-dim)"}}>Quick Capture</span>
+        <span style={{fontSize:11,color:"var(--text-dim)",fontFamily:"var(--mono)",background:"#1a1a1a",padding:"1px 5px",borderRadius:4}}>⌘K</span>
       </button>
 
-      <div style={{fontSize:9,fontWeight:600,color:"var(--text-dim)",textTransform:"uppercase",letterSpacing:"0.1em",padding:"0 10px",marginBottom:4}}>Navigate</div>
-      <NavItem label="capture" active={view==="capture"} onClick={()=>setView("capture")}/>
-      <NavItem label="stream" active={view==="stream"} onClick={()=>setView("stream")}/>
-      <NavItem label="notes" active={view==="notes"} onClick={()=>setView("notes")} count={notes.length}/>
-      <NavItem label="tasks" active={view==="tasks"} onClick={()=>setView("tasks")} count={activeTasks}/>
-      <NavItem label="projects" active={view==="projects"} onClick={()=>setView("projects")} count={projects.filter(p=>p.status!=="Complete").length}/>
-      <NavItem label="board" active={view==="board"} onClick={()=>setView("board")}/>
-      <NavItem label="calendar" active={view==="calendar"} onClick={()=>setView("calendar")}/>
+      <NavItem icon={Icons.capture} label="Capture" active={view==="capture"} onClick={()=>setView("capture")}/>
+      <NavItem icon={Icons.stream} label="Stream" active={view==="stream"} onClick={()=>setView("stream")}/>
+      <NavItem icon={Icons.notes} label="Notes" active={view==="notes"} onClick={()=>setView("notes")} count={notes.length}/>
+      <NavItem icon={Icons.tasks} label="Tasks" active={view==="tasks"} onClick={()=>setView("tasks")} count={activeTasks}/>
+      <NavItem icon={Icons.projects} label="Projects" active={view==="projects"} onClick={()=>setView("projects")} count={projects.filter(p=>p.status!=="Complete").length}/>
+      <NavItem icon={Icons.board} label="Board" active={view==="board"} onClick={()=>setView("board")}/>
+      <NavItem icon={Icons.calendar} label="Calendar" active={view==="calendar"} onClick={()=>setView("calendar")}/>
 
-      <div style={{fontSize:9,fontWeight:600,color:"var(--text-dim)",textTransform:"uppercase",letterSpacing:"0.1em",padding:"0 10px",margin:"12px 0 4px"}}>Intelligence</div>
-      <NavItem label="dashboard" active={view==="dashboard"} onClick={()=>setView("dashboard")}/>
-      <NavItem label="digest" active={view==="digest"} onClick={()=>setView("digest")} count={forgottenCount}/>
-      <NavItem label="inbox" active={view==="inbox"} onClick={()=>setView("inbox")} count={inboxCount}/>
+      <div style={{height:1,background:"var(--border)",margin:"12px 8px"}}/>
+      <NavItem icon={Icons.dashboard} label="Dashboard" active={view==="dashboard"} onClick={()=>setView("dashboard")}/>
+      <NavItem icon={Icons.digest} label="Digest" active={view==="digest"} onClick={()=>setView("digest")} count={forgottenCount}/>
+      <NavItem icon={Icons.inbox} label="Inbox" active={view==="inbox"} onClick={()=>setView("inbox")} count={inboxCount}/>
 
       <div style={{flex:1}}/>
-
-      {/* Connection status */}
-      <div style={{padding:"8px 10px",borderTop:"1px solid var(--border)",marginTop:8}}>
-        <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:4}}>
-          <span style={{width:5,height:5,borderRadius:"50%",background:getApiKey()?"var(--green)":"var(--red)"}}/>
-          <span style={{fontSize:10,color:"var(--text-dim)"}}>{getApiKey()?"connected":"no api key"}</span>
-        </div>
-        <button onClick={()=>setView("settings")} style={{background:"none",border:"none",color:view==="settings"?"var(--accent)":"var(--text-dim)",cursor:"pointer",fontSize:11,padding:0}}>settings</button>
-      </div>
+      <div style={{height:1,background:"var(--border)",margin:"8px 8px"}}/>
+      <NavItem icon={Icons.settings} label="Settings" active={view==="settings"} onClick={()=>setView("settings")}/>
     </div>
 
     {/* MAIN */}
-    <div className="dot-bg" style={{flex:1,padding:"20px 28px",overflowY:"auto"}}>
+    <div style={{flex:1,padding:"28px 40px",overflowY:"auto",background:"var(--bg)"}}>
 
       {/* CAPTURE */}
-      {view==="capture"&&<div className="fade-in">
-        {sectionTitle("Capture","dump thoughts, extract tasks")}
-        <Card hover onClick={()=>setShowCapture(true)} style={{textAlign:"center",padding:"40px 24px",border:"1px dashed var(--border)"}}>
-          <div style={{fontSize:13,color:"var(--accent)",fontWeight:600,marginBottom:4}}>{">"}_</div>
-          <div style={{fontSize:14,fontWeight:600,fontFamily:"var(--font)",marginBottom:2}}>start a mind dump</div>
-          <div style={{fontSize:12,color:"var(--text-dim)"}}>ctrl+k from anywhere</div>
-          {aiLoading&&<div style={{marginTop:10,color:"var(--accent)",fontSize:11}} className="pulse">processing...</div>}
-        </Card>
-        {notes.length>0&&<div style={{marginTop:20}}>
-          <div style={{fontSize:10,fontWeight:600,color:"var(--text-dim)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:6}}>Recent</div>
-          {notes.slice(0,5).map(n=><Card key={n.id} style={{marginBottom:4,padding:12}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-              <span style={{fontSize:10,color:"var(--text-dim)"}}>{fmtFull(n.createdAt)}</span>
-              {n.extractedIds.length>0&&<Tag color="var(--green)">{n.extractedIds.length} tasks</Tag>}
+      {view==="capture"&&<>
+        {sectionTitle("Capture","Dump your thoughts, AI extracts tasks")}
+        <div onClick={()=>setShowCapture(true)} style={{textAlign:"center",padding:"48px 32px",cursor:"pointer",border:"1px dashed var(--border)",borderRadius:12,transition:"border-color 0.15s"}}
+          onMouseEnter={e=>e.currentTarget.style.borderColor="var(--border-hover)"}
+          onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}>
+          <Icons.capture/>
+          <div style={{fontSize:16,fontWeight:600,marginTop:12,marginBottom:4}}>Start a mind dump</div>
+          <div style={{fontSize:13,color:"var(--text-secondary)"}}>Press ⌘K or click here</div>
+          {aiLoading&&<div style={{marginTop:12,color:"var(--accent)",fontSize:13}}>Processing...</div>}
+        </div>
+        {notes.length>0&&<div style={{marginTop:28}}>
+          <h3 style={{fontSize:14,fontWeight:600,color:"var(--text-secondary)",marginBottom:12}}>Recent Captures</h3>
+          {notes.slice(0,5).map(n=><div key={n.id} style={{padding:"14px 16px",background:"var(--card)",border:"1px solid var(--border)",borderRadius:8,marginBottom:6}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+              <span style={{fontSize:12,color:"var(--text-dim)",fontFamily:"var(--mono)"}}>{fmtFull(n.createdAt)}</span>
+              {n.extractedIds.length>0&&<Badge color="var(--green)" dot>{n.extractedIds.length} tasks</Badge>}
             </div>
-            <div style={{fontSize:12,color:"var(--text-secondary)",lineHeight:1.7,whiteSpace:"pre-wrap"}}>{n.rawText.slice(0,200)}{n.rawText.length>200?"...":""}</div>
-          </Card>)}
+            <div style={{fontSize:13,color:"var(--text-secondary)",lineHeight:1.7,whiteSpace:"pre-wrap"}}>{n.rawText.slice(0,200)}{n.rawText.length>200?"...":""}</div>
+          </div>)}
         </div>}
-      </div>}
+      </>}
 
       {/* STREAM */}
-      {view==="stream"&&<div className="fade-in">
-        {sectionTitle("Stream","chronological feed")}
+      {view==="stream"&&<>
+        {sectionTitle("Stream","Everything in chronological order")}
         {(()=>{
           const all=[...notes.map(n=>({...n,_type:"note",_ts:n.createdAt})),...tasks.map(t=>({...t,_type:"task",_ts:t.createdAt})),...projects.map(p=>({...p,_type:"project",_ts:p.createdAt}))].sort((a,b)=>new Date(b._ts)-new Date(a._ts));
           const grouped={};all.forEach(item=>{const day=item._ts?.slice(0,10)||"?";if(!grouped[day])grouped[day]=[];grouped[day].push(item)});
-          return Object.entries(grouped).map(([day,items])=><div key={day} style={{marginBottom:16}}>
-            <div style={{fontSize:10,fontWeight:600,color:"var(--text-dim)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:4}}>{day===todayStr?"today":day}</div>
-            {items.map(item=><div key={item.id} className="hoverable" style={{display:"flex",gap:8,padding:"7px 10px",background:"var(--card)",border:"1px solid var(--border)",borderRadius:6,marginBottom:2,cursor:item._type!=="note"?"pointer":"default",fontSize:12}} onClick={()=>{if(item._type==="task")setPanel({type:"task",item});if(item._type==="project")setPanel({type:"project",item})}}>
-              <span style={{fontSize:10,color:"var(--text-dim)",minWidth:36}}>{fmtTime(item._ts)}</span>
-              <span style={{width:4,height:4,borderRadius:"50%",background:item._type==="note"?"var(--text-dim)":item._type==="task"?"var(--blue)":"var(--accent)",marginTop:5,flexShrink:0}}/>
-              <div style={{flex:1}}><div style={{fontWeight:item._type==="note"?400:500}}>{item._type==="note"?item.rawText.slice(0,80):item.name}</div>
-              <div style={{display:"flex",gap:3,marginTop:2}}><span style={{fontSize:10,color:"var(--text-dim)"}}>{item._type}</span>{item.status&&<Tag color={SC[item.status]} style={{fontSize:9,padding:"0 4px"}}>{item.status}</Tag>}</div></div>
+          return Object.entries(grouped).map(([day,items])=><div key={day} style={{marginBottom:24}}>
+            <div style={{fontSize:12,fontWeight:600,color:"var(--text-secondary)",marginBottom:8}}>{day===todayStr?"Today":day}</div>
+            {items.map(item=><div key={item.id} style={{display:"flex",gap:12,padding:"10px 12px",borderRadius:8,marginBottom:1,cursor:item._type!=="note"?"pointer":"default",transition:"background 0.1s"}}
+              onMouseEnter={e=>e.currentTarget.style.background="var(--card)"}
+              onMouseLeave={e=>e.currentTarget.style.background="transparent"}
+              onClick={()=>{if(item._type==="task")setPanel({type:"task",item});if(item._type==="project")setPanel({type:"project",item})}}>
+              <span style={{fontSize:12,color:"var(--text-dim)",fontFamily:"var(--mono)",minWidth:42}}>{fmtTime(item._ts)}</span>
+              <span style={{width:6,height:6,borderRadius:"50%",background:item._type==="note"?"var(--text-dim)":item._type==="task"?"var(--blue)":"var(--accent)",marginTop:6,flexShrink:0}}/>
+              <div style={{flex:1}}><div style={{fontSize:13,fontWeight:item._type==="note"?400:500}}>{item._type==="note"?item.rawText.slice(0,100):item.name}</div>
+              <div style={{display:"flex",gap:6,marginTop:3}}><span style={{fontSize:12,color:"var(--text-dim)"}}>{item._type}</span>{item.status&&<Badge color={SC[item.status]}>{item.status}</Badge>}</div></div>
             </div>)}
           </div>);
         })()}
-        {!notes.length&&!tasks.length&&<Card style={{textAlign:"center",padding:40,color:"var(--text-dim)"}}>empty. ctrl+k to start.</Card>}
-      </div>}
+        {!notes.length&&!tasks.length&&<div style={{textAlign:"center",padding:48,color:"var(--text-dim)"}}>Stream is empty. Press ⌘K to start.</div>}
+      </>}
 
       {/* NOTES */}
-      {view==="notes"&&<div className="fade-in">
-        {sectionTitle("Notes")}
-        <input value={searchQ} onChange={e=>setSearchQ(e.target.value)} placeholder="search..." style={{width:"100%",maxWidth:320,padding:"6px 10px",borderRadius:6,border:"1px solid var(--border)",fontSize:12,background:"var(--surface)",color:"var(--text)",marginBottom:12,boxSizing:"border-box"}}/>
-        {notes.filter(n=>!searchQ||n.rawText.toLowerCase().includes(searchQ.toLowerCase())).map(n=><Card key={n.id} style={{marginBottom:6,padding:14}}>
-          <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-            <span style={{fontSize:10,color:"var(--text-dim)"}}>{fmtFull(n.createdAt)}</span>
-            <div style={{display:"flex",gap:3}}>{n.extractedIds.length>0&&<Tag color="var(--green)">{n.extractedIds.length} tasks</Tag>}<Tag>{n.source}</Tag></div>
+      {view==="notes"&&<>
+        {sectionTitle("Notes","Your raw captures, searchable")}
+        <div style={{marginBottom:16,position:"relative"}}>
+          <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",color:"var(--text-dim)"}}><Icons.search/></span>
+          <input value={searchQ} onChange={e=>setSearchQ(e.target.value)} placeholder="Search notes..." style={{width:"100%",maxWidth:400,padding:"8px 12px 8px 36px",borderRadius:8,border:"1px solid var(--border)",fontSize:13,background:"var(--card)",color:"var(--text)",boxSizing:"border-box",outline:"none"}}/>
+        </div>
+        {notes.filter(n=>!searchQ||n.rawText.toLowerCase().includes(searchQ.toLowerCase())).map(n=><div key={n.id} style={{padding:"16px",background:"var(--card)",border:"1px solid var(--border)",borderRadius:8,marginBottom:8}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+            <span style={{fontSize:12,color:"var(--text-dim)",fontFamily:"var(--mono)"}}>{fmtFull(n.createdAt)}</span>
+            <div style={{display:"flex",gap:6}}>{n.extractedIds.length>0&&<Badge color="var(--green)" dot>{n.extractedIds.length} tasks</Badge>}<Badge color="var(--text-dim)">{n.source}</Badge></div>
           </div>
-          <div style={{fontSize:12,color:"var(--text)",lineHeight:1.7,whiteSpace:"pre-wrap"}}>{n.rawText}</div>
-          {n.extractedIds.length>0&&<div style={{marginTop:6,paddingTop:6,borderTop:"1px solid var(--border)"}}>
-            {tasks.filter(t=>n.extractedIds.includes(t.id)).map(t=><div key={t.id} onClick={()=>setPanel({type:"task",item:t})} style={{fontSize:11,color:"var(--accent)",cursor:"pointer",padding:"1px 0"}}>-> {t.name}</div>)}
+          <div style={{fontSize:13,color:"var(--text)",lineHeight:1.7,whiteSpace:"pre-wrap"}}>{n.rawText}</div>
+          {n.extractedIds.length>0&&<div style={{marginTop:10,paddingTop:10,borderTop:"1px solid var(--border)"}}>
+            {tasks.filter(t=>n.extractedIds.includes(t.id)).map(t=><div key={t.id} onClick={()=>setPanel({type:"task",item:t})} style={{fontSize:13,color:"var(--blue)",cursor:"pointer",padding:"2px 0"}}>→ {t.name}</div>)}
           </div>}
-          <div style={{textAlign:"right",marginTop:4}}><Btn variant="ghost" small onClick={()=>update("notes",prev=>prev.filter(x=>x.id!==n.id))}>delete</Btn></div>
-        </Card>)}
-        {!notes.length&&<Card style={{textAlign:"center",padding:40,color:"var(--text-dim)"}}>no notes. ctrl+k to capture.</Card>}
-      </div>}
+          <div style={{textAlign:"right",marginTop:8}}><Btn variant="ghost" size="xs" onClick={()=>update("notes",prev=>prev.filter(x=>x.id!==n.id))}>Delete</Btn></div>
+        </div>)}
+        {!notes.length&&<div style={{textAlign:"center",padding:48,color:"var(--text-dim)"}}>No notes yet. Press ⌘K to capture.</div>}
+      </>}
 
       {/* TASKS */}
-      {view==="tasks"&&<div className="fade-in">
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-          <div><h1 style={{fontSize:18,fontWeight:800,fontFamily:"var(--font)",letterSpacing:"-0.03em"}}>Tasks</h1><p style={{fontSize:11,color:"var(--text-dim)",marginTop:1}}>{activeTasks} active{forgottenCount>0?` / ${forgottenCount} forgotten`:""}</p></div>
-          <Btn small onClick={()=>{const t=addTask({name:"New Task",projectId:null,areaId:areas[0]?.id,status:"Not Started",priority:"Medium",effort:"M",due:null,notes:"",createdAt:now(),updatedAt:now(),touchedAt:now(),recurrence:null});setPanel({type:"task",item:t})}}>+ new</Btn>
+      {view==="tasks"&&<>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
+          <div><h1 style={{fontSize:24,fontWeight:700,letterSpacing:"-0.5px"}}>Tasks</h1><p style={{fontSize:14,color:"var(--text-secondary)",marginTop:4}}>{activeTasks} active{forgottenCount>0&&<span style={{color:"var(--yellow)"}}> · {forgottenCount} forgotten</span>}</p></div>
+          <Btn size="sm" onClick={()=>{const t=addTask({name:"New Task",projectId:null,areaId:areas[0]?.id,status:"Not Started",priority:"Medium",effort:"M",due:null,notes:"",createdAt:now(),updatedAt:now(),touchedAt:now(),recurrence:null});setPanel({type:"task",item:t})}}>+ New Task</Btn>
         </div>
-        {tasks.sort((a,b)=>{if(a.status==="Complete"&&b.status!=="Complete")return 1;if(a.status!=="Complete"&&b.status==="Complete")return -1;if(isForgotten(a)&&!isForgotten(b))return -1;if(!isForgotten(a)&&isForgotten(b))return 1;return new Date(b.touchedAt||b.createdAt)-new Date(a.touchedAt||a.createdAt)}).map(t=>{
+        <div style={{border:"1px solid var(--border)",borderRadius:10,overflow:"hidden"}}>
+        {tasks.sort((a,b)=>{if(a.status==="Complete"&&b.status!=="Complete")return 1;if(a.status!=="Complete"&&b.status==="Complete")return -1;if(isForgotten(a)&&!isForgotten(b))return -1;if(!isForgotten(a)&&isForgotten(b))return 1;return new Date(b.touchedAt||b.createdAt)-new Date(a.touchedAt||a.createdAt)}).map((t,i,arr)=>{
           const area=areas.find(a=>a.id===t.areaId);const forgotten=isForgotten(t);
-          return <div key={t.id} className="hoverable" onClick={()=>setPanel({type:"task",item:t})} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"var(--card)",border:`1px solid ${forgotten?"rgba(251,191,36,0.15)":"var(--border)"}`,borderRadius:6,marginBottom:2,cursor:"pointer"}}>
-            <button onClick={e=>{e.stopPropagation();if(t.status!=="Complete")completeTask(t);else saveTask(touchNow({...t,status:"Not Started"}))}} style={{width:16,height:16,borderRadius:3,border:`1.5px solid ${SC[t.status]}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,cursor:"pointer",background:t.status==="Complete"?SC[t.status]:"transparent",color:"#000",fontWeight:700}}>{t.status==="Complete"?"\u2713":""}</button>
+          return <div key={t.id} onClick={()=>setPanel({type:"task",item:t})} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",background:forgotten?"rgba(245,166,35,0.03)":"transparent",borderBottom:i<arr.length-1?"1px solid var(--border)":"none",cursor:"pointer",transition:"background 0.1s"}}
+            onMouseEnter={e=>e.currentTarget.style.background=forgotten?"rgba(245,166,35,0.06)":"var(--card)"}
+            onMouseLeave={e=>e.currentTarget.style.background=forgotten?"rgba(245,166,35,0.03)":"transparent"}>
+            <button onClick={e=>{e.stopPropagation();if(t.status!=="Complete")completeTask(t);else saveTask(touchNow({...t,status:"Not Started"}))}} style={{width:18,height:18,borderRadius:99,border:`1.5px solid ${SC[t.status]}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,cursor:"pointer",background:t.status==="Complete"?SC[t.status]:"transparent",color:"#000",fontWeight:700}}>{t.status==="Complete"?"\u2713":""}</button>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:12,fontWeight:500,textDecoration:t.status==="Complete"?"line-through":"none",color:t.status==="Complete"?"var(--text-dim)":"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name}</div>
-              <div style={{display:"flex",gap:3,marginTop:2,alignItems:"center"}}>
-                {area&&<Tag color={area.color} style={{fontSize:9,padding:"0 5px"}}>{area.name}</Tag>}
-                {t.due&&<span style={{fontSize:10,color:t.due<todayStr&&t.status!=="Complete"?"var(--red)":"var(--text-dim)"}}>{fmt(t.due)}</span>}
-                {forgotten&&<Tag color="var(--yellow)" style={{fontSize:9,padding:"0 5px"}}>{daysSince(t.touchedAt||t.createdAt)}d</Tag>}
+              <div style={{fontSize:14,textDecoration:t.status==="Complete"?"line-through":"none",color:t.status==="Complete"?"var(--text-dim)":"var(--text)"}}>{t.name}</div>
+              <div style={{display:"flex",gap:6,marginTop:3,alignItems:"center"}}>
+                {area&&<Badge color={area.color}>{area.name}</Badge>}
+                {t.due&&<span style={{fontSize:12,color:t.due<todayStr&&t.status!=="Complete"?"var(--red)":"var(--text-dim)",fontFamily:"var(--mono)"}}>{fmt(t.due)}</span>}
+                {forgotten&&<Badge color="var(--yellow)">{daysSince(t.touchedAt||t.createdAt)}d untouched</Badge>}
               </div>
             </div>
-            <span style={{width:5,height:5,borderRadius:"50%",background:PC[t.priority]}} title={t.priority}/>
-            <span style={{fontSize:10,fontWeight:600,color:EC[t.effort]}}>{t.effort}</span>
+            <span style={{width:8,height:8,borderRadius:"50%",background:PC[t.priority],flexShrink:0}} title={t.priority}/>
+            <span style={{fontSize:12,fontWeight:600,color:EC[t.effort],fontFamily:"var(--mono)",minWidth:20,textAlign:"right"}}>{t.effort}</span>
           </div>;
         })}
-        {!tasks.length&&<Card style={{textAlign:"center",padding:40,color:"var(--text-dim)"}}>no tasks yet.</Card>}
-      </div>}
+        </div>
+        {!tasks.length&&<div style={{textAlign:"center",padding:48,color:"var(--text-dim)"}}>No tasks yet.</div>}
+      </>}
 
       {/* PROJECTS */}
-      {view==="projects"&&<div className="fade-in">
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-          <div><h1 style={{fontSize:18,fontWeight:800,fontFamily:"var(--font)",letterSpacing:"-0.03em"}}>Projects</h1><p style={{fontSize:11,color:"var(--text-dim)",marginTop:1}}>{projects.filter(p=>p.status!=="Complete").length} active</p></div>
-          <Btn small onClick={()=>{const p=addProject({name:"New Project",areaId:areas[0]?.id,status:"Not Started",priority:"Medium",effort:"M",due:null,notes:""});setPanel({type:"project",item:p})}}>+ new</Btn>
+      {view==="projects"&&<>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
+          <div><h1 style={{fontSize:24,fontWeight:700,letterSpacing:"-0.5px"}}>Projects</h1><p style={{fontSize:14,color:"var(--text-secondary)",marginTop:4}}>{projects.filter(p=>p.status!=="Complete").length} active</p></div>
+          <Btn size="sm" onClick={()=>{const p=addProject({name:"New Project",areaId:areas[0]?.id,status:"Not Started",priority:"Medium",effort:"M",due:null,notes:""});setPanel({type:"project",item:p})}}>+ New Project</Btn>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>
           {projects.map(p=>{const area=areas.find(a=>a.id===p.areaId);const linked=tasks.filter(t=>t.projectId===p.id);const done=linked.filter(t=>t.status==="Complete").length;const prog=linked.length?Math.round(done/linked.length*100):0;
-            return <Card key={p.id} hover onClick={()=>setPanel({type:"project",item:p})} style={{borderLeft:`2px solid ${area?.color||"var(--text-dim)"}`}}>
-              <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><div style={{fontSize:13,fontWeight:600,fontFamily:"var(--font)"}}>{p.name}</div><Tag color={SC[p.status]} style={{fontSize:9}}>{p.status}</Tag></div>
-              {area&&<Tag color={area.color} style={{fontSize:9,marginBottom:6}}>{area.name}</Tag>}
-              <div style={{display:"flex",alignItems:"center",gap:5,marginTop:6}}><div style={{flex:1,height:2,borderRadius:1,background:"var(--border)",overflow:"hidden"}}><div style={{width:`${prog}%`,height:"100%",background:area?.color||"var(--blue)",transition:"width 0.3s"}}/></div><span style={{fontSize:10,color:"var(--text-dim)"}}>{done}/{linked.length}</span></div>
-              {p.due&&<div style={{fontSize:10,color:"var(--text-dim)",marginTop:4}}>due {fmt(p.due)}</div>}
-            </Card>;
+            return <div key={p.id} onClick={()=>setPanel({type:"project",item:p})} style={{padding:20,background:"var(--card)",border:"1px solid var(--border)",borderRadius:10,cursor:"pointer",transition:"border-color 0.15s"}}
+              onMouseEnter={e=>e.currentTarget.style.borderColor="var(--border-hover)"}
+              onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+                <div style={{fontSize:15,fontWeight:600}}>{p.name}</div>
+                <Badge color={SC[p.status]} dot>{p.status}</Badge>
+              </div>
+              {area&&<Badge color={area.color} style={{marginBottom:12}}>{area.name}</Badge>}
+              <div style={{display:"flex",alignItems:"center",gap:8,marginTop:8}}>
+                <div style={{flex:1,height:4,borderRadius:2,background:"#1a1a1a",overflow:"hidden"}}><div style={{width:`${prog}%`,height:"100%",background:area?.color||"var(--blue)",borderRadius:2,transition:"width 0.3s"}}/></div>
+                <span style={{fontSize:12,color:"var(--text-dim)",fontFamily:"var(--mono)"}}>{done}/{linked.length}</span>
+              </div>
+              {p.due&&<div style={{fontSize:12,color:"var(--text-dim)",marginTop:8}}>Due {fmt(p.due)}</div>}
+            </div>;
           })}
         </div>
-        {!projects.length&&<Card style={{textAlign:"center",padding:40,color:"var(--text-dim)"}}>no projects yet.</Card>}
-      </div>}
+        {!projects.length&&<div style={{textAlign:"center",padding:48,color:"var(--text-dim)"}}>No projects yet.</div>}
+      </>}
 
       {/* BOARD */}
-      {view==="board"&&<div className="fade-in">
-        {sectionTitle("Board")}
-        <div style={{display:"grid",gridTemplateColumns:`repeat(${STATUSES.length},1fr)`,gap:6,minHeight:"60vh"}}>
-          {STATUSES.map(status=><div key={status} onDragOver={e=>e.preventDefault()} onDrop={e=>{const id=e.dataTransfer.getData("taskId");if(id)saveTask(touchNow({...tasks.find(t=>t.id===id),status}))}} style={{background:"var(--surface)",borderRadius:8,border:"1px solid var(--border)",padding:8}}>
-            <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:8,padding:"0 4px"}}><span style={{width:5,height:5,borderRadius:"50%",background:SC[status]}}/><span style={{fontSize:11,fontWeight:600}}>{status}</span><span style={{fontSize:9,color:"var(--text-dim)",marginLeft:"auto"}}>{tasks.filter(t=>t.status===status).length}</span></div>
-            {tasks.filter(t=>t.status===status).map(t=>{const area=areas.find(a=>a.id===t.areaId);return <div key={t.id} draggable onDragStart={e=>e.dataTransfer.setData("taskId",t.id)} onClick={()=>setPanel({type:"task",item:t})} className="hoverable" style={{padding:"6px 8px",background:"var(--card)",border:"1px solid var(--border)",borderRadius:6,marginBottom:3,cursor:"grab",fontSize:11}}>
-              <div style={{fontWeight:500,marginBottom:2}}>{t.name}</div>
-              <div style={{display:"flex",gap:2,alignItems:"center"}}><span style={{width:4,height:4,borderRadius:"50%",background:PC[t.priority]}}/>{area&&<span style={{fontSize:9,color:area.color}}>{area.name}</span>}{t.due&&<span style={{fontSize:9,color:"var(--text-dim)",marginLeft:"auto"}}>{fmt(t.due)}</span>}</div>
+      {view==="board"&&<>
+        {sectionTitle("Board","Drag tasks between columns")}
+        <div style={{display:"grid",gridTemplateColumns:`repeat(${STATUSES.length},1fr)`,gap:8,minHeight:"60vh"}}>
+          {STATUSES.map(status=><div key={status} onDragOver={e=>e.preventDefault()} onDrop={e=>{const id=e.dataTransfer.getData("taskId");if(id)saveTask(touchNow({...tasks.find(t=>t.id===id),status}))}} style={{background:"var(--surface)",borderRadius:10,border:"1px solid var(--border)",padding:10}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:12,padding:"2px 4px"}}><span style={{width:8,height:8,borderRadius:"50%",background:SC[status]}}/><span style={{fontSize:13,fontWeight:600}}>{status}</span><span style={{fontSize:12,color:"var(--text-dim)",fontFamily:"var(--mono)",marginLeft:"auto"}}>{tasks.filter(t=>t.status===status).length}</span></div>
+            {tasks.filter(t=>t.status===status).map(t=>{const area=areas.find(a=>a.id===t.areaId);return <div key={t.id} draggable onDragStart={e=>e.dataTransfer.setData("taskId",t.id)} onClick={()=>setPanel({type:"task",item:t})} style={{padding:"8px 10px",background:"var(--card)",border:"1px solid var(--border)",borderRadius:8,marginBottom:4,cursor:"grab",fontSize:13,transition:"border-color 0.1s"}}
+              onMouseEnter={e=>e.currentTarget.style.borderColor="var(--border-hover)"}
+              onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}>
+              <div style={{marginBottom:4}}>{t.name}</div>
+              <div style={{display:"flex",gap:4,alignItems:"center"}}><span style={{width:6,height:6,borderRadius:"50%",background:PC[t.priority]}}/>{area&&<span style={{fontSize:11,color:area.color}}>{area.name}</span>}{t.due&&<span style={{fontSize:11,color:"var(--text-dim)",fontFamily:"var(--mono)",marginLeft:"auto"}}>{fmt(t.due)}</span>}</div>
             </div>})}
           </div>)}
         </div>
-      </div>}
+      </>}
 
       {/* CALENDAR */}
       {view==="calendar"&&(()=>{
         const yr=calMonth.getFullYear(),mn=calMonth.getMonth();const fd=new Date(yr,mn,1).getDay();const dim=new Date(yr,mn+1,0).getDate();const sp=(fd+6)%7;
         const days=[];for(let i=0;i<sp;i++)days.push(null);for(let i=1;i<=dim;i++)days.push(i);while(days.length%7)days.push(null);
         const allItems=[...tasks.filter(t=>t.due&&t.status!=="Complete").map(t=>({...t,itemType:"task"})),...tasks.filter(t=>t.recurrence&&t.due&&t.status!=="Complete").flatMap(t=>generateGhostDates(t.due,t.recurrence,yr+"-"+String(mn+2).padStart(2,"0")+"-01",5).map(d=>({...t,due:d,itemType:"ghost"})))];
-        return <div className="fade-in">{sectionTitle("Calendar")}
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-            <Btn variant="ghost" small onClick={()=>setCalMonth(new Date(yr,mn-1,1))}>prev</Btn>
-            <span style={{fontWeight:600,fontSize:13,fontFamily:"var(--font)"}}>{calMonth.toLocaleDateString("en-AU",{month:"long",year:"numeric"})}</span>
-            <Btn variant="ghost" small onClick={()=>setCalMonth(new Date(yr,mn+1,1))}>next</Btn>
+        return <>{sectionTitle("Calendar")}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <Btn variant="secondary" size="sm" onClick={()=>setCalMonth(new Date(yr,mn-1,1))}>← Prev</Btn>
+            <span style={{fontWeight:600,fontSize:15}}>{calMonth.toLocaleDateString("en-AU",{month:"long",year:"numeric"})}</span>
+            <Btn variant="secondary" size="sm" onClick={()=>setCalMonth(new Date(yr,mn+1,1))}>Next →</Btn>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
-            {["mon","tue","wed","thu","fri","sat","sun"].map(d=><div key={d} style={{padding:4,textAlign:"center",fontSize:10,color:"var(--text-dim)",textTransform:"uppercase",letterSpacing:"0.05em"}}>{d}</div>)}
-            {days.map((day,i)=>{if(!day)return <div key={i} style={{minHeight:64,background:"var(--surface)",borderRadius:4}}/>;
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,border:"1px solid var(--border)",borderRadius:10,overflow:"hidden"}}>
+            {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d=><div key={d} style={{padding:8,textAlign:"center",fontSize:12,fontWeight:600,color:"var(--text-secondary)",background:"var(--surface)",borderBottom:"1px solid var(--border)"}}>{d}</div>)}
+            {days.map((day,i)=>{if(!day)return <div key={i} style={{minHeight:80,background:"var(--surface)"}}/>;
               const ds=yr+"-"+String(mn+1).padStart(2,"0")+"-"+String(day).padStart(2,"0");const isToday=ds===todayStr;const di=allItems.filter(item=>item.due===ds);
-              return <div key={i} onDragOver={e=>e.preventDefault()} onDrop={e=>{const id=e.dataTransfer.getData("taskId");if(id)handleCalDrop(id,day)}} style={{minHeight:64,background:"var(--surface)",borderRadius:4,padding:"2px 4px",border:isToday?"1px solid var(--accent)25":"1px solid var(--border)"}}>
-                <div style={{fontSize:10,fontWeight:isToday?700:400,color:isToday?"var(--accent)":"var(--text-dim)",marginBottom:1}}>{day}</div>
-                {di.slice(0,3).map((item,j)=><div key={j} draggable={item.itemType!=="ghost"} onDragStart={e=>e.dataTransfer.setData("taskId",item.id)} onClick={()=>{if(item.itemType!=="ghost")setPanel({type:"task",item})}} style={{fontSize:9,padding:"1px 3px",borderRadius:3,marginBottom:1,background:item.itemType==="ghost"?"transparent":`${PC[item.priority]}10`,borderLeft:`2px solid ${item.itemType==="ghost"?"var(--text-dim)":PC[item.priority]}`,color:item.itemType==="ghost"?"var(--text-dim)":"var(--text)",cursor:item.itemType==="ghost"?"default":"pointer",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontStyle:item.itemType==="ghost"?"italic":"normal"}}>{item.name}</div>)}
-                {di.length>3&&<div style={{fontSize:8,color:"var(--text-dim)"}}>+{di.length-3}</div>}
+              return <div key={i} onDragOver={e=>e.preventDefault()} onDrop={e=>{const id=e.dataTransfer.getData("taskId");if(id)handleCalDrop(id,day)}} style={{minHeight:80,background:isToday?"rgba(212,168,83,0.04)":"var(--surface)",padding:"4px 6px",borderRight:((i+1)%7!==0)?"1px solid var(--border)":"none",borderBottom:"1px solid var(--border)"}}>
+                <div style={{fontSize:12,fontWeight:isToday?700:400,color:isToday?"var(--accent)":"var(--text-dim)",fontFamily:"var(--mono)",marginBottom:3}}>{day}</div>
+                {di.slice(0,3).map((item,j)=><div key={j} draggable={item.itemType!=="ghost"} onDragStart={e=>e.dataTransfer.setData("taskId",item.id)} onClick={()=>{if(item.itemType!=="ghost")setPanel({type:"task",item})}} style={{fontSize:10,padding:"2px 4px",borderRadius:4,marginBottom:1,background:item.itemType==="ghost"?"transparent":`${PC[item.priority]}15`,borderLeft:`2px solid ${item.itemType==="ghost"?"var(--text-dim)":PC[item.priority]}`,color:item.itemType==="ghost"?"var(--text-dim)":"var(--text)",cursor:item.itemType==="ghost"?"default":"pointer",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontStyle:item.itemType==="ghost"?"italic":"normal"}}>{item.name}</div>)}
+                {di.length>3&&<div style={{fontSize:10,color:"var(--text-dim)"}}>+{di.length-3}</div>}
               </div>;
             })}
           </div>
-        </div>;
+        </>;
       })()}
 
       {/* DASHBOARD */}
-      {view==="dashboard"&&<div className="fade-in">
+      {view==="dashboard"&&<>
         {sectionTitle("Dashboard")}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:8,marginBottom:16}}>
-          {[{l:"active",v:activeTasks,c:"var(--blue)"},{l:"forgotten",v:forgottenCount,c:"var(--yellow)"},{l:"projects",v:projects.filter(p=>p.status!=="Complete").length,c:"var(--accent)"},{l:"notes",v:notes.length,c:"var(--text-secondary)"},{l:"proposals",v:inboxCount,c:"var(--green)"}].map((s,i)=><Card key={i} style={{padding:14}}>
-            <div style={{fontSize:10,color:"var(--text-dim)",textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:3}}>{s.l}</div>
-            <div style={{fontSize:22,fontWeight:800,color:s.c,fontFamily:"var(--font)"}}>{s.v}</div>
-          </Card>)}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:12,marginBottom:24}}>
+          {[{l:"Active Tasks",v:activeTasks,c:"var(--blue)"},{l:"Forgotten",v:forgottenCount,c:"var(--yellow)"},{l:"Projects",v:projects.filter(p=>p.status!=="Complete").length,c:"var(--accent)"},{l:"Notes",v:notes.length,c:"var(--text-secondary)"},{l:"Proposals",v:inboxCount,c:"var(--green)"}].map((s,i)=><div key={i} style={{padding:20,background:"var(--card)",border:"1px solid var(--border)",borderRadius:10}}>
+            <div style={{fontSize:13,color:"var(--text-secondary)",marginBottom:6}}>{s.l}</div>
+            <div style={{fontSize:28,fontWeight:700,color:s.c}}>{s.v}</div>
+          </div>)}
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          <Card><div style={{fontSize:12,fontWeight:600,marginBottom:10}}>by status</div><Donut size={90} stroke={8} center={tasks.length} sub="total" segments={STATUSES.map(s=>({pct:tasks.length?(tasks.filter(t=>t.status===s).length/tasks.length)*100:0,color:SC[s]}))}/></Card>
-          <Card><div style={{fontSize:12,fontWeight:600,marginBottom:10}}>by area</div>{areas.map(a=>{const c=tasks.filter(t=>t.areaId===a.id&&t.status!=="Complete").length;return <div key={a.id} style={{display:"flex",alignItems:"center",gap:5,marginBottom:5}}><span style={{width:8,height:8,borderRadius:2,background:a.color,flexShrink:0}}/><span style={{fontSize:11,flex:1}}>{a.name}</span><div style={{width:60,height:2,borderRadius:1,background:"var(--border)",overflow:"hidden"}}><div style={{width:`${Math.min(100,c*12)}%`,height:"100%",background:a.color}}/></div><span style={{fontSize:10,color:"var(--text-dim)",minWidth:14,textAlign:"right"}}>{c}</span></div>})}</Card>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          <div style={{padding:20,background:"var(--card)",border:"1px solid var(--border)",borderRadius:10}}><div style={{fontSize:14,fontWeight:600,marginBottom:16}}>By Status</div><Donut size={110} stroke={10} center={tasks.length} sub="total" segments={STATUSES.map(s=>({pct:tasks.length?(tasks.filter(t=>t.status===s).length/tasks.length)*100:0,color:SC[s]}))}/></div>
+          <div style={{padding:20,background:"var(--card)",border:"1px solid var(--border)",borderRadius:10}}><div style={{fontSize:14,fontWeight:600,marginBottom:16}}>By Area</div>{areas.map(a=>{const c=tasks.filter(t=>t.areaId===a.id&&t.status!=="Complete").length;return <div key={a.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}><span style={{width:8,height:8,borderRadius:"50%",background:a.color,flexShrink:0}}/><span style={{fontSize:13,flex:1}}>{a.name}</span><div style={{width:80,height:4,borderRadius:2,background:"#1a1a1a",overflow:"hidden"}}><div style={{width:`${Math.min(100,c*12)}%`,height:"100%",background:a.color,borderRadius:2}}/></div><span style={{fontSize:12,color:"var(--text-dim)",fontFamily:"var(--mono)",minWidth:18,textAlign:"right"}}>{c}</span></div>})}</div>
         </div>
-        {forgottenCount>0&&<Card style={{marginTop:8,borderColor:"rgba(251,191,36,0.12)"}}>
-          <div style={{fontSize:12,fontWeight:600,color:"var(--yellow)",marginBottom:6}}>forgotten ({forgottenCount})</div>
-          {tasks.filter(t=>isForgotten(t)).slice(0,5).map(t=><div key={t.id} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:"1px solid var(--border)"}}><span style={{flex:1,fontSize:11}}>{t.name}</span><span style={{fontSize:10,color:"var(--yellow)"}}>{daysSince(t.touchedAt||t.createdAt)}d</span><Btn variant="ghost" small onClick={()=>saveTask(touchNow({...t}))}>touch</Btn></div>)}
-        </Card>}
-      </div>}
+        {forgottenCount>0&&<div style={{marginTop:12,padding:20,background:"var(--card)",border:"1px solid rgba(245,166,35,0.2)",borderRadius:10}}>
+          <div style={{fontSize:14,fontWeight:600,color:"var(--yellow)",marginBottom:10}}>Forgotten ({forgottenCount})</div>
+          {tasks.filter(t=>isForgotten(t)).slice(0,5).map(t=><div key={t.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderBottom:"1px solid var(--border)"}}><span style={{flex:1,fontSize:13}}>{t.name}</span><span style={{fontSize:12,color:"var(--yellow)",fontFamily:"var(--mono)"}}>{daysSince(t.touchedAt||t.createdAt)}d</span><Btn variant="secondary" size="xs" onClick={()=>saveTask(touchNow({...t}))}>Touch</Btn></div>)}
+        </div>}
+      </>}
 
       {/* DIGEST */}
-      {view==="digest"&&<div className="fade-in">
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-          <div><h1 style={{fontSize:18,fontWeight:800,fontFamily:"var(--font)",letterSpacing:"-0.03em"}}>Daily Digest</h1><p style={{fontSize:11,color:"var(--text-dim)",marginTop:1}}>ai morning briefing</p></div>
-          <Btn small onClick={refreshDigest} disabled={briefLoading}>{briefLoading?"generating...":"refresh"}</Btn>
+      {view==="digest"&&<>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
+          <div><h1 style={{fontSize:24,fontWeight:700,letterSpacing:"-0.5px"}}>Daily Digest</h1><p style={{fontSize:14,color:"var(--text-secondary)",marginTop:4}}>AI-powered morning briefing</p></div>
+          <Btn size="sm" onClick={refreshDigest} disabled={briefLoading}>{briefLoading?"Generating...":"Refresh"}</Btn>
         </div>
-        {!briefing&&!briefLoading&&<Card style={{textAlign:"center",padding:40,color:"var(--text-dim)"}}>set api key, then click refresh.</Card>}
-        {briefLoading&&<Card style={{textAlign:"center",padding:40,color:"var(--accent)"}} className="pulse">generating...</Card>}
-        {briefing&&<>
-          {briefing.greeting&&<Card style={{marginBottom:8}}><div style={{fontSize:13,fontWeight:500,fontFamily:"var(--font)"}}>{briefing.greeting}</div></Card>}
-          {briefing.today_focus?.length>0&&<Card style={{marginBottom:8}}><div style={{fontSize:11,fontWeight:600,color:"var(--blue)",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.05em"}}>focus</div>{briefing.today_focus.map((f,i)=><div key={i} style={{padding:"3px 0",fontSize:12,borderBottom:"1px solid var(--border)"}}>-> {f}</div>)}</Card>}
-          {briefing.forgotten?.length>0&&<Card style={{marginBottom:8,borderColor:"rgba(251,191,36,0.12)"}}><div style={{fontSize:11,fontWeight:600,color:"var(--yellow)",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.05em"}}>forgotten</div>{briefing.forgotten.map((f,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:5,padding:"3px 0",borderBottom:"1px solid var(--border)"}}><span style={{flex:1,fontSize:12}}>{f.name||f}</span>{f.days&&<span style={{fontSize:10,color:"var(--yellow)"}}>{f.days}d</span>}<Btn variant="ghost" small onClick={()=>{const t=tasks.find(t=>t.name===(f.name||f));if(t)saveTask(touchNow({...t}))}}>touch</Btn></div>)}</Card>}
-          {briefing.incoming?.length>0&&<Card style={{marginBottom:8}}><div style={{fontSize:11,fontWeight:600,color:"var(--accent)",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.05em"}}>incoming</div>{briefing.incoming.map((f,i)=><div key={i} style={{padding:"3px 0",fontSize:12,borderBottom:"1px solid var(--border)"}}>{f.name||f}{f.due&&<span style={{fontSize:10,color:"var(--text-dim)",marginLeft:6}}>due {f.due}</span>}</div>)}</Card>}
-          {briefing.recommendation&&<Card><div style={{fontSize:11,fontWeight:600,color:"var(--green)",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.05em"}}>recommendation</div><div style={{fontSize:12,lineHeight:1.6}}>{briefing.recommendation}</div></Card>}
-        </>}
-      </div>}
+        {!briefing&&!briefLoading&&<div style={{textAlign:"center",padding:48,color:"var(--text-dim)"}}>Set your API key in Settings, then click Refresh.</div>}
+        {briefLoading&&<div style={{textAlign:"center",padding:48,color:"var(--accent)"}}>Generating digest...</div>}
+        {briefing&&<div style={{maxWidth:600}}>
+          {briefing.greeting&&<div style={{padding:20,background:"var(--card)",border:"1px solid var(--border)",borderRadius:10,marginBottom:10}}><div style={{fontSize:15,fontWeight:500}}>{briefing.greeting}</div></div>}
+          {briefing.today_focus?.length>0&&<div style={{padding:20,background:"var(--card)",border:"1px solid var(--border)",borderRadius:10,marginBottom:10}}><div style={{fontSize:13,fontWeight:600,color:"var(--blue)",marginBottom:10}}>Today's Focus</div>{briefing.today_focus.map((f,i)=><div key={i} style={{padding:"6px 0",fontSize:14,borderBottom:"1px solid var(--border)"}}>→ {f}</div>)}</div>}
+          {briefing.forgotten?.length>0&&<div style={{padding:20,background:"var(--card)",border:"1px solid rgba(245,166,35,0.15)",borderRadius:10,marginBottom:10}}><div style={{fontSize:13,fontWeight:600,color:"var(--yellow)",marginBottom:10}}>Forgotten</div>{briefing.forgotten.map((f,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderBottom:"1px solid var(--border)"}}><span style={{flex:1,fontSize:14}}>{f.name||f}</span>{f.days&&<span style={{fontSize:12,color:"var(--yellow)",fontFamily:"var(--mono)"}}>{f.days}d</span>}<Btn variant="secondary" size="xs" onClick={()=>{const t=tasks.find(t=>t.name===(f.name||f));if(t)saveTask(touchNow({...t}))}}>Touch</Btn></div>)}</div>}
+          {briefing.incoming?.length>0&&<div style={{padding:20,background:"var(--card)",border:"1px solid var(--border)",borderRadius:10,marginBottom:10}}><div style={{fontSize:13,fontWeight:600,color:"var(--accent)",marginBottom:10}}>Incoming</div>{briefing.incoming.map((f,i)=><div key={i} style={{padding:"6px 0",fontSize:14,borderBottom:"1px solid var(--border)"}}>{f.name||f}{f.due&&<span style={{fontSize:12,color:"var(--text-dim)",marginLeft:8}}>due {f.due}</span>}</div>)}</div>}
+          {briefing.recommendation&&<div style={{padding:20,background:"var(--card)",border:"1px solid var(--border)",borderRadius:10}}><div style={{fontSize:13,fontWeight:600,color:"var(--green)",marginBottom:10}}>Recommendation</div><div style={{fontSize:14,lineHeight:1.7,color:"var(--text-secondary)"}}>{briefing.recommendation}</div></div>}
+        </div>}
+      </>}
 
       {/* INBOX */}
-      {view==="inbox"&&<div className="fade-in">
-        {sectionTitle("Inbox","ai-proposed projects")}
+      {view==="inbox"&&<>
+        {sectionTitle("Inbox","AI-proposed projects from your notes")}
         {proposals.filter(p=>p.status==="pending").map(prop=>{const area=areas.find(a=>a.id===prop.areaId);
-          return <Card key={prop.id} style={{marginBottom:8}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><div style={{fontSize:13,fontWeight:600,fontFamily:"var(--font)"}}>{prop.suggestedName}</div><span style={{width:5,height:5,borderRadius:"50%",background:(prop.confidence||0)>=0.7?"var(--green)":"var(--yellow)",marginTop:5}} title={`${Math.round((prop.confidence||0)*100)}%`}/></div>
-            {area&&<Tag color={area.color} style={{marginBottom:6}}>{area.name}</Tag>}
-            {prop.themeSummary&&<div style={{fontSize:11,color:"var(--text-secondary)",lineHeight:1.5,marginBottom:8}}>{prop.themeSummary}</div>}
-            <div style={{display:"flex",gap:4}}><Btn small onClick={()=>{addProject({name:prop.suggestedName,areaId:prop.areaId||areas[0]?.id,status:"Not Started",priority:"Medium",effort:"M",due:null,notes:prop.themeSummary||"",aiProposed:true});update("proposals",prev=>prev.map(x=>x.id===prop.id?{...x,status:"accepted"}:x));setToast({message:`project "${prop.suggestedName}" created`,type:"success"})}}>create project</Btn><Btn variant="ghost" small onClick={()=>update("proposals",prev=>prev.map(x=>x.id===prop.id?{...x,status:"dismissed"}:x))}>dismiss</Btn></div>
-          </Card>;
+          return <div key={prop.id} style={{padding:20,background:"var(--card)",border:"1px solid var(--border)",borderRadius:10,marginBottom:10,maxWidth:600}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}><div style={{fontSize:16,fontWeight:600}}>{prop.suggestedName}</div><span style={{width:8,height:8,borderRadius:"50%",background:(prop.confidence||0)>=0.7?"var(--green)":"var(--yellow)",marginTop:6}} title={`${Math.round((prop.confidence||0)*100)}%`}/></div>
+            {area&&<Badge color={area.color} style={{marginBottom:10}}>{area.name}</Badge>}
+            {prop.themeSummary&&<div style={{fontSize:13,color:"var(--text-secondary)",lineHeight:1.6,marginBottom:14}}>{prop.themeSummary}</div>}
+            <div style={{display:"flex",gap:8}}><Btn size="sm" onClick={()=>{addProject({name:prop.suggestedName,areaId:prop.areaId||areas[0]?.id,status:"Not Started",priority:"Medium",effort:"M",due:null,notes:prop.themeSummary||"",aiProposed:true});update("proposals",prev=>prev.map(x=>x.id===prop.id?{...x,status:"accepted"}:x));setToast({message:`Project "${prop.suggestedName}" created`,type:"success"})}}>Create Project</Btn><Btn variant="secondary" size="sm" onClick={()=>update("proposals",prev=>prev.map(x=>x.id===prop.id?{...x,status:"dismissed"}:x))}>Dismiss</Btn></div>
+          </div>;
         })}
-        {!proposals.filter(p=>p.status==="pending").length&&<Card style={{textAlign:"center",padding:40,color:"var(--text-dim)"}}>no proposals. ai suggests projects when it detects themes.</Card>}
-      </div>}
+        {!proposals.filter(p=>p.status==="pending").length&&<div style={{textAlign:"center",padding:48,color:"var(--text-dim)"}}>No pending proposals. AI suggests projects when it detects recurring themes in your notes.</div>}
+      </>}
 
       {/* SETTINGS */}
-      {view==="settings"&&<div className="fade-in">
+      {view==="settings"&&<>
         {sectionTitle("Settings")}
 
-        <Card style={{maxWidth:480,marginBottom:10}}>
-          <div style={{fontSize:13,fontWeight:600,fontFamily:"var(--font)",marginBottom:3}}>API Key</div>
-          <div style={{fontSize:11,color:"var(--text-dim)",marginBottom:8}}>get from <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com</a></div>
-          <input type="text" value={apiKeyVal} onChange={e=>saveKey(e.target.value)} placeholder="sk-ant-api03-..." style={{width:"100%",padding:"6px 10px",borderRadius:6,border:"1px solid var(--border)",fontSize:12,background:"var(--surface)",color:"var(--text)",boxSizing:"border-box",WebkitTextSecurity:"disc"}}/>
-          <div style={{fontSize:10,color:"var(--text-dim)",marginTop:3}}>{apiKeyVal?`${apiKeyVal.length} chars / ${apiKeyVal.slice(0,12)}...`:"not set"}</div>
-          <div style={{display:"flex",gap:4,marginTop:6}}>
-            <Btn variant="secondary" small onClick={async()=>{
+        <div style={{maxWidth:520,padding:20,background:"var(--card)",border:"1px solid var(--border)",borderRadius:10,marginBottom:12}}>
+          <div style={{fontSize:15,fontWeight:600,marginBottom:4}}>API Key</div>
+          <div style={{fontSize:13,color:"var(--text-secondary)",marginBottom:12}}>Get your key from <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com</a></div>
+          <input type="text" value={apiKeyVal} onChange={e=>saveKey(e.target.value)} placeholder="sk-ant-api03-..." style={{width:"100%",padding:"8px 12px",borderRadius:6,border:"1px solid var(--border)",fontSize:13,fontFamily:"var(--mono)",background:"var(--surface)",color:"var(--text)",boxSizing:"border-box",outline:"none",WebkitTextSecurity:"disc"}}/>
+          <div style={{fontSize:12,color:"var(--text-dim)",fontFamily:"var(--mono)",marginTop:6}}>{apiKeyVal?`${apiKeyVal.length} chars · ${apiKeyVal.slice(0,12)}...`:"Not set"}</div>
+          <div style={{display:"flex",gap:8,marginTop:10}}>
+            <Btn variant="secondary" size="sm" onClick={async()=>{
               const key=apiKeyVal.trim().replace(/[^\x20-\x7E]/g,"");
-              if(!key){setTestResult({ok:false,msg:"no key"});return}
+              if(!key){setTestResult({ok:false,msg:"No key set"});return}
               setTesting(true);setTestResult(null);
               try{const r=await fetch(getProxyUrl(),{method:"POST",headers:{"Content-Type":"application/json","x-api-key":key},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:10,messages:[{role:"user",content:"Say OK"}]})});
-                const d=await r.json();if(d.error)setTestResult({ok:false,msg:d.error.message||d.error.type});else setTestResult({ok:true,msg:"connected: "+((d.content?.[0]?.text)||"")})
+                const d=await r.json();if(d.error)setTestResult({ok:false,msg:d.error.message||d.error.type});else setTestResult({ok:true,msg:"Connected! "+((d.content?.[0]?.text)||"")})
               }catch(e){setTestResult({ok:false,msg:e.message})}setTesting(false);
-            }}>{testing?"testing...":"test connection"}</Btn>
-            <Btn variant="ghost" small onClick={()=>{saveKey("");setTestResult(null)}}>clear</Btn>
+            }}>{testing?"Testing...":"Test Connection"}</Btn>
+            <Btn variant="ghost" size="sm" onClick={()=>{saveKey("");setTestResult(null)}}>Clear</Btn>
           </div>
-          {testResult&&<div style={{marginTop:6,padding:"5px 8px",borderRadius:4,fontSize:11,color:testResult.ok?"var(--green)":"var(--red)",background:testResult.ok?"rgba(52,211,153,0.06)":"rgba(248,113,113,0.06)",lineHeight:1.4}}>{testResult.ok?"ok":"err"}: {testResult.msg}</div>}
-        </Card>
+          {testResult&&<div style={{marginTop:10,padding:"8px 12px",borderRadius:6,fontSize:13,fontFamily:"var(--mono)",color:testResult.ok?"var(--green)":"var(--red)",background:testResult.ok?"rgba(80,227,194,0.06)":"rgba(238,90,90,0.06)",lineHeight:1.5,border:`1px solid ${testResult.ok?"rgba(80,227,194,0.15)":"rgba(238,90,90,0.15)"}`}}>{testResult.ok?"✓":"✗"} {testResult.msg}</div>}
+        </div>
 
-        <Card style={{maxWidth:480,marginBottom:10}}>
-          <div style={{fontSize:13,fontWeight:600,fontFamily:"var(--font)",marginBottom:3}}>API Proxy</div>
-          <div style={{fontSize:11,color:"var(--text-dim)",marginBottom:8}}>on vercel: leave empty. otherwise enter your proxy url.</div>
-          <input type="text" value={proxyVal} onChange={e=>saveProxy(e.target.value)} placeholder="/api/proxy (default)" style={{width:"100%",padding:"6px 10px",borderRadius:6,border:"1px solid var(--border)",fontSize:12,background:"var(--surface)",color:"var(--text)",boxSizing:"border-box"}}/>
-          <div style={{fontSize:10,color:"var(--text-dim)",marginTop:3}}>using: {getProxyUrl()}</div>
-        </Card>
+        <div style={{maxWidth:520,padding:20,background:"var(--card)",border:"1px solid var(--border)",borderRadius:10,marginBottom:12}}>
+          <div style={{fontSize:15,fontWeight:600,marginBottom:4}}>API Proxy</div>
+          <div style={{fontSize:13,color:"var(--text-secondary)",marginBottom:12}}>If deployed to Vercel, leave empty (uses /api/proxy). Otherwise enter your proxy URL.</div>
+          <input type="text" value={proxyVal} onChange={e=>saveProxy(e.target.value)} placeholder="/api/proxy (default)" style={{width:"100%",padding:"8px 12px",borderRadius:6,border:"1px solid var(--border)",fontSize:13,fontFamily:"var(--mono)",background:"var(--surface)",color:"var(--text)",boxSizing:"border-box",outline:"none"}}/>
+          <div style={{fontSize:12,color:"var(--text-dim)",fontFamily:"var(--mono)",marginTop:6}}>Using: {getProxyUrl()}</div>
+        </div>
 
-        <Card style={{maxWidth:480,marginBottom:10}}>
-          <div style={{fontSize:13,fontWeight:600,fontFamily:"var(--font)",marginBottom:8}}>Areas</div>
-          {areas.map(a=><div key={a.id} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 8px",background:"var(--surface)",border:"1px solid var(--border)",borderRadius:6,marginBottom:3}}>
-            <span style={{width:10,height:10,borderRadius:2,background:a.color,flexShrink:0}}/>
-            <input value={a.name} onChange={e=>update("areas",prev=>prev.map(x=>x.id===a.id?{...x,name:e.target.value}:x))} style={{flex:1,fontSize:12,background:"transparent",border:"none",color:"var(--text)",outline:"none"}}/>
-            <div style={{display:"flex",gap:1}}>{AREA_SWATCHES.map(sw=><button key={sw} onClick={()=>update("areas",prev=>prev.map(x=>x.id===a.id?{...x,color:sw}:x))} style={{width:12,height:12,borderRadius:2,background:sw,border:a.color===sw?"1.5px solid var(--text)":"1px solid transparent",cursor:"pointer"}}/>)}</div>
-            <button onClick={()=>update("areas",prev=>prev.filter(x=>x.id!==a.id))} style={{background:"none",border:"none",color:"var(--text-dim)",cursor:"pointer",fontSize:12}}>x</button>
+        <div style={{maxWidth:520,padding:20,background:"var(--card)",border:"1px solid var(--border)",borderRadius:10,marginBottom:12}}>
+          <div style={{fontSize:15,fontWeight:600,marginBottom:14}}>Areas</div>
+          {areas.map(a=><div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:8,marginBottom:4,transition:"background 0.1s"}}
+            onMouseEnter={e=>e.currentTarget.style.background="var(--surface)"}
+            onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+            <span style={{width:12,height:12,borderRadius:"50%",background:a.color,flexShrink:0}}/>
+            <input value={a.name} onChange={e=>update("areas",prev=>prev.map(x=>x.id===a.id?{...x,name:e.target.value}:x))} style={{flex:1,fontSize:13,background:"transparent",border:"none",color:"var(--text)",outline:"none"}}/>
+            <div style={{display:"flex",gap:2}}>{AREA_SWATCHES.map(sw=><button key={sw} onClick={()=>update("areas",prev=>prev.map(x=>x.id===a.id?{...x,color:sw}:x))} style={{width:16,height:16,borderRadius:"50%",background:sw,border:a.color===sw?"2px solid #fff":"2px solid transparent",cursor:"pointer",transition:"border-color 0.1s"}}/>)}</div>
+            <button onClick={()=>update("areas",prev=>prev.filter(x=>x.id!==a.id))} style={{background:"none",border:"none",color:"var(--text-dim)",cursor:"pointer",fontSize:16,padding:"0 4px"}}>×</button>
           </div>)}
-          <Btn variant="ghost" small style={{marginTop:4}} onClick={()=>update("areas",prev=>[...prev,{id:uid(),name:"New Area",color:AREA_SWATCHES[prev.length%AREA_SWATCHES.length],icon:AREA_ICONS[prev.length%AREA_ICONS.length],keywords:[],userCreated:true}])}>+ add area</Btn>
-          <div style={{marginTop:8}}><div style={{fontSize:10,color:"var(--text-dim)",textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:3}}>Keywords</div>
-            {areas.map(a=><div key={a.id} style={{marginBottom:3,display:"flex",alignItems:"center",gap:5}}>
-              <span style={{fontSize:10,color:a.color,fontWeight:500,minWidth:50}}>{a.name}</span>
-              <input value={(a.keywords||[]).join(", ")} onChange={e=>update("areas",prev=>prev.map(x=>x.id===a.id?{...x,keywords:e.target.value.split(",").map(k=>k.trim()).filter(Boolean)}:x))} placeholder="keyword1, keyword2" style={{flex:1,fontSize:10,padding:"2px 5px",borderRadius:3,border:"1px solid var(--border)",background:"var(--surface)",color:"var(--text)"}}/>
+          <Btn variant="secondary" size="sm" style={{marginTop:8}} onClick={()=>update("areas",prev=>[...prev,{id:uid(),name:"New Area",color:AREA_SWATCHES[prev.length%AREA_SWATCHES.length],icon:"N",keywords:[],userCreated:true}])}>+ Add Area</Btn>
+          <div style={{marginTop:14,paddingTop:14,borderTop:"1px solid var(--border)"}}><div style={{fontSize:13,color:"var(--text-secondary)",marginBottom:8}}>Keywords (for AI area detection)</div>
+            {areas.map(a=><div key={a.id} style={{marginBottom:6,display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:12,color:a.color,fontWeight:500,minWidth:60}}>{a.name}</span>
+              <input value={(a.keywords||[]).join(", ")} onChange={e=>update("areas",prev=>prev.map(x=>x.id===a.id?{...x,keywords:e.target.value.split(",").map(k=>k.trim()).filter(Boolean)}:x))} placeholder="keyword1, keyword2" style={{flex:1,fontSize:12,padding:"4px 8px",borderRadius:6,border:"1px solid var(--border)",background:"var(--surface)",color:"var(--text)",fontFamily:"var(--mono)",outline:"none"}}/>
             </div>)}
           </div>
-        </Card>
+        </div>
 
-        <Card style={{maxWidth:480}}>
-          <div style={{fontSize:13,fontWeight:600,fontFamily:"var(--font)",marginBottom:8}}>Data</div>
-          <div style={{display:"flex",gap:4}}>
-            <Btn variant="secondary" small onClick={()=>{const d=JSON.stringify(data,null,2);const b=new Blob([d],{type:"application/json"});const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download="synapse-"+new Date().toISOString().slice(0,10)+".json";a.click()}}>export</Btn>
-            <Btn variant="secondary" small onClick={()=>{const inp=document.createElement("input");inp.type="file";inp.accept=".json";inp.onchange=e=>{const reader=new FileReader();reader.onload=ev=>{try{setData(JSON.parse(ev.target.result));setToast({message:"imported",type:"success"})}catch(err){setToast({message:"invalid file",type:"error"})}};reader.readAsText(e.target.files[0])};inp.click()}}>import</Btn>
-            <Btn variant="danger" small onClick={()=>{if(confirm("Wipe all data?")){localStorage.removeItem(STORAGE_KEY);localStorage.removeItem("synapse-digest");location.reload()}}}>wipe</Btn>
+        <div style={{maxWidth:520,padding:20,background:"var(--card)",border:"1px solid var(--border)",borderRadius:10}}>
+          <div style={{fontSize:15,fontWeight:600,marginBottom:14}}>Data</div>
+          <div style={{display:"flex",gap:8}}>
+            <Btn variant="secondary" size="sm" onClick={()=>{const d=JSON.stringify(data,null,2);const b=new Blob([d],{type:"application/json"});const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download="synapse-"+new Date().toISOString().slice(0,10)+".json";a.click()}}>Export JSON</Btn>
+            <Btn variant="secondary" size="sm" onClick={()=>{const inp=document.createElement("input");inp.type="file";inp.accept=".json";inp.onchange=e=>{const reader=new FileReader();reader.onload=ev=>{try{setData(JSON.parse(ev.target.result));setToast({message:"Data imported",type:"success"})}catch(err){setToast({message:"Invalid file",type:"error"})}};reader.readAsText(e.target.files[0])};inp.click()}}>Import</Btn>
+            <Btn variant="danger" size="sm" onClick={()=>{if(confirm("Wipe all data? This cannot be undone.")){localStorage.removeItem(STORAGE_KEY);localStorage.removeItem("synapse-digest");location.reload()}}}>Wipe All Data</Btn>
           </div>
-        </Card>
-      </div>}
+        </div>
+      </>}
     </div>
 
     {panel&&<DetailPanel type={panel.type} item={panel.item} areas={areas} onClose={()=>setPanel(null)} onSave={panel.type==="project"?saveProject:saveTask} onDelete={panel.type==="project"?deleteProject:deleteTask} tasks={tasks} projects={projects} onSaveTask={saveTask} onDeleteTask={deleteTask} onAddTask={addTask} onOpenTask={t=>setPanel({type:"task",item:t})}/>}
-    </div>
-
-    {/* STATUS BAR */}
-    <div style={{height:28,background:"var(--surface)",borderTop:"1px solid var(--border)",display:"flex",alignItems:"center",padding:"0 12px",gap:16,flexShrink:0,fontSize:10,color:"var(--text-dim)"}}>
-      <span style={{display:"flex",alignItems:"center",gap:4}}><span style={{width:4,height:4,borderRadius:"50%",background:getApiKey()?"var(--green)":"var(--text-dim)"}}/>synapse</span>
-      <span>{activeTasks} tasks</span>
-      {dueTodayCount>0&&<span style={{color:"var(--accent)"}}>{dueTodayCount} due today</span>}
-      {forgottenCount>0&&<span style={{color:"var(--yellow)"}}>{forgottenCount} forgotten</span>}
-      <span style={{flex:1}}/>
-      <span>{clock.toLocaleDateString("en-AU",{weekday:"short",day:"numeric",month:"short"})}</span>
-      <span>{clock.toLocaleTimeString("en-AU",{hour:"2-digit",minute:"2-digit",hour12:false})}</span>
-    </div>
   </div>;
 }
 
