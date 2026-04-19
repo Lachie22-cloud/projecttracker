@@ -77,6 +77,30 @@ window.SY = window.SY || {};
 
   SY.seed = { areas, projects, tasks, notes, proposals };
 
+  const STORAGE_KEY = 'cortex-v1-data';
+  const LEGACY_KEY  = 'pcc-v9-synapse';
+
+  SY.loadData = function () {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw);
+        return {
+          areas:     saved.areas     || SY.seed.areas,
+          projects:  saved.projects  || [],
+          tasks:     saved.tasks     || [],
+          notes:     saved.notes     || [],
+          proposals: saved.proposals || [],
+        };
+      }
+    } catch (e) {}
+    return { ...SY.seed };
+  };
+
+  SY.saveData = function (data) {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (e) {}
+  };
+
   SY.helpers = {
     dayStr,
     daysSince: (ts) => !ts ? 999 : Math.floor((Date.now() - new Date(ts).getTime()) / 86400e3),

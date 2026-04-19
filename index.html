@@ -374,7 +374,7 @@ function App() {
   const setSetting = (k, v) => setSettings(s => ({ ...s, [k]: v }));
 
   // app data
-  const [data, setData] = useState(SY.seed);
+  const [data, setData] = useState(() => SY.loadData());
   const [view, setView] = useState(() => localStorage.getItem('synapse-view') || 'dashboard');
   const [panel, setPanel] = useState(null);
   const [showCapture, setShowCapture] = useState(false);
@@ -384,6 +384,7 @@ function App() {
   const [tweakMode, setTweakMode] = useState(false);
 
   useEffect(() => { localStorage.setItem('synapse-view', view); }, [view]);
+  useEffect(() => { SY.saveData(data); }, [data]);
 
   // Tweak-mode bridge
   useEffect(() => {
