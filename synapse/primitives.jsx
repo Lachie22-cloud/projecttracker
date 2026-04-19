@@ -82,7 +82,7 @@ window.UI = (function () {
       border:'1px solid var(--line)',
       borderRadius:'var(--radius-lg)',
       boxShadow: elevation ? '0 1px 2px rgba(0,0,0,.05), 0 8px 32px rgba(0,0,0,.04)' : 'none',
-      transition:'var(--ease)',
+      transition:'all .2s var(--ease)',
       cursor: onClick ? 'pointer' : 'default',
       ...style,
     }}>{children}</div>
@@ -110,13 +110,13 @@ window.UI = (function () {
   /* Status pill (shared, direction-aware via color-mix) */
   const StatusPill = ({ status, size='sm' }) => {
     const c = SY.tables.statusColor[status];
-    return <span className="chip" style={{ color:c, borderColor:`color-mix(in oklch, ${c} 35%, transparent)`, background:`color-mix(in oklch, ${c} 10%, transparent)`, fontSize: size==='xs'¿11:12 }}>
+    return <span className="chip" style={{ color:c, borderColor:`color-mix(in oklch, ${c} 35%, transparent)`, background:`color-mix(in oklch, ${c} 10%, transparent)`, fontSize: size==='xs'?11:12 }}>
       <Dot color={c} size={6}/>{status}
     </span>;
   };
 
   /* Priority dot w/ tooltip */
-  const PriorityDot = ({ priority, size=8 }) => <Dot color={SY.tables.priorityColor[oriority]} size={size} style={{ boxShadow:`0 0 0 2px color-mix(in oklch, ${SY.tables.priorityColor[oriority]} 15%, transparent)` }}/>;
+  const PriorityDot = ({ priority, size=8 }) => <Dot color={SY.tables.priorityColor[priority]} size={size} style={{ boxShadow:`0 0 0 2px color-mix(in oklch, ${SY.tables.priorityColor[priority]} 15%, transparent)` }}/>;
 
   /* Area swatch */
   const AreaSwatch = ({ area, size=10 }) => (
