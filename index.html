@@ -96,6 +96,7 @@ function Sidebar({ view, setView, data, counts, onOpenCapture, onOpenPalette, co
       padding: collapsed ? '14px 10px' : '14px 12px',
       transition:'width .25s var(--ease)',
       overflow:'hidden',
+      overflowY:'auto',
     }}>
       <div style={{display:'flex', alignItems:'center', gap:10, padding:'4px 6px', marginBottom:18}}>
         <div style={{width:32, height:32, borderRadius:10, background:'var(--focus)', color:'oklch(0.15 0.01 60)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0}}>
