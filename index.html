@@ -49,6 +49,7 @@ function Sidebar({ view, setView, data, counts, onOpenCapture, onOpenPalette, co
   ];
   const section2 = [
     { id:'digest',    label:'Briefing',   icon: Ic.digest },
+    { id:'health',    label:'Health',     icon: Ic.health },
     { id:'stream',    label:'Stream',     icon: Ic.stream },
     { id:'notes',     label:'Notes',      icon: Ic.notes, count: counts.notes },
     { id:'inbox',     label:'Proposals',  icon: Ic.inbox, count: counts.proposals, focus: counts.proposals > 0 },
@@ -374,6 +375,57 @@ function App() {
 
   const setSetting = (k, v) => setSettings(s => ({ ...s, [k]: v }));
 
+  // Whoop integration
+  const [whoopTokens, setWhoopTokens] = useState(() => {
+    try { const s = localStorage.getItem('cortex-whoop'); return s ? JSON.parse(s) : null; } catch(e) { return null; }
+  });
+  const [whoopData, setWhoopData] = useState(() => {
+    try { const s = localStorage.getItem('cortex-whoop-data'); return s ? JSON.parse(s) : null; } catch(e) { return null; }
+  });
+  const [whoopLoading, setWhoopLoading] = useState(false);
+
+  // Pick up tokens from URL after OAuth callback
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('whoop_token');
+    const refresh = params.get('whoop_refresh');
+    const expires = params.get('whoop_expires');
+    if (token) {
+      const t = { access_token: token, refresh_token: refresh, expires_at: Number(expires) };
+      setWhoopTokens(t);
+      localStorage.setItem('cortex-whoop', JSON.stringify(t));
+      // Clean URL
+      window.history.replaceState({}, '', window.location.pathname);
+      fetchWhoopData(t);
+    }
+  }, []);
+
+  const fetchWhoopData = async (tokens) => {
+    const t = tokens || whoopTokens;
+    if (!t) return;
+    setWhoopLoading(true);
+    try {
+      const url = `/api/whoop-data?token=${encodeURIComponent(t.access_token)}&refresh=${encodeURIComponent(t.refresh_token || '')}`;
+      const res = await fetch(url);
+      const json = await res.json();
+      if (json.newTokens) {
+        const updated = { ...t, ...json.newTokens };
+        setWhoopTokens(updated);
+        localStorage.setItem('cortex-whoop', JSON.stringify(updated));
+      }
+      setWhoopData(json);
+      localStorage.setItem('cortex-whoop-data', JSON.stringify(json));
+    } catch(e) {
+      console.error('Whoop fetch failed', e);
+    }
+    setWhoopLoading(false);
+  };
+
+  // Auto-refresh Whoop data on load if tokens exist
+  useEffect(() => {
+    if (whoopTokens && !whoopData) fetchWhoopData(whoopTokens);
+  }, []);
+
   // app data
   const [data, setData] = useState(() => SY.loadData());
   const [view, setView] = useState(() => localStorage.getItem('synapse-view') || 'dashboard');
@@ -504,6 +556,7 @@ function App() {
       case 'notes':     return <Views.Notes data={data} actions={actions}/>;
       case 'digest':    return <Views.Digest data={data} actions={actions}/>;
       case 'inbox':     return <Views.Inbox data={data} actions={actions}/>;
+      case 'health':    return <Views.Health whoopData={whoopData} whoopConnected={!!whoopTokens} onConnect={() => window.location.href='/api/whoop-auth'} onRefresh={() => fetchWhoopData()} loading={whoopLoading}/>;
       case 'settings':  return <Views.Settings data={data} actions={actions} state={settings}/>;
       default: return <Dashboard.View data={data} actions={actions} layout={settings.dashboard_layout}/>;
     }
