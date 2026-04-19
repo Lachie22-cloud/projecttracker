@@ -36,6 +36,7 @@ window.UI = (function () {
     dot:       ({size=8}) => <svg width={size} height={size} viewBox="0 0 8 8"><circle cx="4" cy="4" r="4" fill="currentColor"/></svg>,
     command:   ({size=12}) => <svg width={size} height={size} {...S}><path d="M7 7h10v10H7zM7 7a2 2 0 1 1-2-2 2 2 0 0 1 2 2zM17 7a2 2 0 1 0 2-2 2 2 0 0 0-2 2zM7 17a2 2 0 1 0-2 2 2 2 0 0 0 2-2zM17 17a2 2 0 1 1 2 2 2 2 0 0 1-2-2z"/></svg>,
     wave:      ({size=16}) => <svg width={size} height={size} {...S}><path d="M3 12c2-4 4-4 6 0s4 4 6 0 4-4 6 0"/></svg>,
+    health:    ({size=18}) => <svg width={size} height={size} {...S}><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>,
   };
 
   /* ------- Small atoms ------- */
@@ -81,7 +82,7 @@ window.UI = (function () {
       border:'1px solid var(--line)',
       borderRadius:'var(--radius-lg)',
       boxShadow: elevation ? '0 1px 2px rgba(0,0,0,.05), 0 8px 32px rgba(0,0,0,.04)' : 'none',
-      transition:'all .2s var(--ease)',
+      transition:'var(--ease)',
       cursor: onClick ? 'pointer' : 'default',
       ...style,
     }}>{children}</div>
@@ -109,13 +110,13 @@ window.UI = (function () {
   /* Status pill (shared, direction-aware via color-mix) */
   const StatusPill = ({ status, size='sm' }) => {
     const c = SY.tables.statusColor[status];
-    return <span className="chip" style={{ color:c, borderColor:`color-mix(in oklch, ${c} 35%, transparent)`, background:`color-mix(in oklch, ${c} 10%, transparent)`, fontSize: size==='xs'?11:12 }}>
+    return <span className="chip" style={{ color:c, borderColor:`color-mix(in oklch, ${c} 35%, transparent)`, background:`color-mix(in oklch, ${c} 10%, transparent)`, fontSize: size==='xs'¿11:12 }}>
       <Dot color={c} size={6}/>{status}
     </span>;
   };
 
   /* Priority dot w/ tooltip */
-  const PriorityDot = ({ priority, size=8 }) => <Dot color={SY.tables.priorityColor[priority]} size={size} style={{ boxShadow:`0 0 0 2px color-mix(in oklch, ${SY.tables.priorityColor[priority]} 15%, transparent)` }}/>;
+  const PriorityDot = ({ priority, size=8 }) => <Dot color={SY.tables.priorityColor[oriority]} size={size} style={{ boxShadow:`0 0 0 2px color-mix(in oklch, ${SY.tables.priorityColor[oriority]} 15%, transparent)` }}/>;
 
   /* Area swatch */
   const AreaSwatch = ({ area, size=10 }) => (
