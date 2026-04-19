@@ -1,7 +1,5 @@
 {
   "rewrites": [
-    { "source": "/api/proxy", "destination": "/api/proxy" },
-    { "source": "/command-centre/(.*)", "destination": "/command-centre/$1" },
-    { "source": "/", "destination": "/command-centre/index.html" }
+    { "source": "/api/proxy", "destination": "/api/proxy" }
   ]
 }

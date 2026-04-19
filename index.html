@@ -1,11 +1,538 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-direction="neural" data-mode="dark" data-accent="amber" data-font="grotesk" data-density="comfortable">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="refresh" content="0;url=command-centre/">
-<title>Redirecting…</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cortex — Second brain</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='20' fill='%23d4a853'/></svg>">
+<link rel="stylesheet" href="synapse/tokens.css">
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script src="synapse/data.js"></script>
+<script type="text/babel" src="synapse/primitives.jsx"></script>
+<script type="text/babel" src="synapse/dashboard.jsx"></script>
+<script type="text/babel" src="synapse/quotes.jsx"></script>
+<script type="text/babel" src="synapse/views.jsx"></script>
 </head>
 <body>
-<p>Redirecting to <a href="command-centre/">Command Centre</a>…</p>
+<div id="root"></div>
+
+<script>
+/* Editable defaults for Tweaks panel */
+window.TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "direction": "neural",
+  "mode": "dark",
+  "accent": "amber",
+  "font": "grotesk",
+  "density": "comfortable",
+  "dashboard_layout": "default"
+}/*EDITMODE-END*/;
+</script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef, useMemo, useCallback } = React;
+const { Ic, Chip, Dot, Kbd, Button, Card, Toggle, StatusPill, PriorityDot, AreaSwatch, AiTag, Bar } = UI;
+const H = SY.helpers;
+
+/* ----------- Sidebar ----------- */
+function Sidebar({ view, setView, data, counts, onOpenCapture, onOpenPalette, collapsed, onToggleCollapse }) {
+  const section1 = [
+    { id:'dashboard', label:'Home',       icon: Ic.synapse },
+    { id:'today',     label:'Today',      icon: Ic.today, count: counts.today },
+    { id:'tasks',     label:'Tasks',      icon: Ic.tasks, count: counts.tasksActive },
+    { id:'projects',  label:'Projects',   icon: Ic.projects, count: counts.projects },
+    { id:'board',     label:'Board',      icon: Ic.board },
+    { id:'calendar',  label:'Calendar',   icon: Ic.calendar },
+  ];
+  const section2 = [
+    { id:'digest',    label:'Briefing',   icon: Ic.digest },
+    { id:'stream',    label:'Stream',     icon: Ic.stream },
+    { id:'notes',     label:'Notes',      icon: Ic.notes, count: counts.notes },
+    { id:'inbox',     label:'Proposals',  icon: Ic.inbox, count: counts.proposals, focus: counts.proposals > 0 },
+  ];
+
+  const NavItem = ({ item }) => {
+    const active = view === item.id;
+    const Icon = item.icon;
+    return (
+      <button onClick={() => setView(item.id)} title={item.label} style={{
+        display:'flex', alignItems:'center', gap:10,
+        padding: collapsed ? '10px' : '8px 10px',
+        justifyContent: collapsed ? 'center' : 'flex-start',
+        borderRadius:8, width:'100%',
+        background: active ? 'var(--surface-2)' : 'transparent',
+        color: active ? 'var(--text)' : 'var(--text-3)',
+        fontSize: 13, fontWeight: active ? 500 : 400,
+        border: '1px solid ' + (active ? 'var(--line)' : 'transparent'),
+        transition:'all .12s',
+      }}
+        onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--surface-2)'; }}
+        onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+      >
+        <span style={{opacity: active ? 1 : .8}}><Icon/></span>
+        {!collapsed && <span style={{flex:1, textAlign:'left'}}>{item.label}</span>}
+        {!collapsed && item.count > 0 && (
+          <span className="mono" style={{
+            fontSize:11,
+            color: item.focus ? 'var(--focus)' : 'var(--text-4)',
+            background: item.focus ? 'var(--glow)' : 'var(--surface-2)',
+            padding:'1px 6px', borderRadius:999, minWidth:18, textAlign:'center',
+          }}>{item.count}</span>
+        )}
+      </button>
+    );
+  };
+
+  return (
+    <aside style={{
+      width: collapsed ? 64 : 232,
+      flexShrink:0,
+      background:'var(--bg-deep)',
+      borderRight:'1px solid var(--line)',
+      display:'flex', flexDirection:'column',
+      padding: collapsed ? '14px 10px' : '14px 12px',
+      transition:'width .25s var(--ease)',
+      overflow:'hidden',
+    }}>
+      <div style={{display:'flex', alignItems:'center', gap:10, padding:'4px 6px', marginBottom:18}}>
+        <div style={{width:32, height:32, borderRadius:10, background:'var(--focus)', color:'oklch(0.15 0.01 60)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0}}>
+          <Ic.synapse size={18}/>
+        </div>
+        {!collapsed && <span className="display" style={{fontSize:16, fontWeight:700, letterSpacing:'-0.02em'}}>Cortex</span>}
+        {!collapsed && <button onClick={onToggleCollapse} style={{marginLeft:'auto', color:'var(--text-4)', padding:4}}><Ic.chev dir="left" size={14}/></button>}
+      </div>
+
+      {collapsed && (
+        <button onClick={onToggleCollapse} style={{color:'var(--text-4)', padding:6, marginBottom:8, display:'flex', justifyContent:'center'}} title="Expand"><Ic.chev dir="right" size={14}/></button>
+      )}
+
+      <button onClick={onOpenPalette} style={{
+        display:'flex', alignItems:'center', gap:8,
+        padding: collapsed ? '10px' : '8px 10px',
+        justifyContent: collapsed ? 'center' : 'flex-start',
+        borderRadius:8, width:'100%',
+        background:'var(--surface)',
+        border:'1px solid var(--line)',
+        color:'var(--text-3)', fontSize:13, marginBottom:12,
+      }}>
+        <Ic.search size={14}/>
+        {!collapsed && <><span style={{flex:1, textAlign:'left'}}>Search</span><Kbd>⌘K</Kbd></>}
+      </button>
+
+      <button onClick={onOpenCapture} style={{
+        display:'flex', alignItems:'center', gap:8,
+        padding: collapsed ? '10px' : '9px 10px',
+        justifyContent: collapsed ? 'center' : 'flex-start',
+        borderRadius:8, width:'100%',
+        background:'var(--focus)', color:'oklch(0.15 0.01 60)', fontWeight:600, fontSize:13,
+        marginBottom:18,
+      }}>
+        <Ic.sparkle size={14}/>
+        {!collapsed && <><span style={{flex:1, textAlign:'left'}}>Quick capture</span><Kbd style={{background:'color-mix(in oklch, black 15%, transparent)', color:'inherit', borderColor:'transparent'}}>⌘⇧K</Kbd></>}
+      </button>
+
+      <div style={{display:'flex', flexDirection:'column', gap:2, marginBottom:12}}>
+        {section1.map(i => <NavItem key={i.id} item={i}/>)}
+      </div>
+      <div style={{height:1, background:'var(--line)', margin:'4px 8px 10px'}}/>
+      <div style={{display:'flex', flexDirection:'column', gap:2}}>
+        {section2.map(i => <NavItem key={i.id} item={i}/>)}
+      </div>
+
+      <div style={{flex:1}}/>
+
+      {/* Area list (brain map summary) */}
+      {!collapsed && (
+        <div style={{padding:'10px 6px', marginTop:8, borderTop:'1px solid var(--line)'}}>
+          <div style={{fontSize:10.5, color:'var(--text-4)', textTransform:'uppercase', letterSpacing:'.1em', marginBottom:8}}>Areas of mind</div>
+          {data.areas.map(a => {
+            const n = data.tasks.filter(t => t.areaId === a.id && t.status !== 'Complete').length;
+            return (
+              <div key={a.id} style={{display:'flex', alignItems:'center', gap:8, padding:'5px 4px', fontSize:12, color:'var(--text-3)', cursor:'pointer', borderRadius:6}}>
+                <AreaSwatch area={a} size={8}/>
+                <span style={{flex:1}}>{a.name}</span>
+                <span className="mono" style={{color:'var(--text-4)'}}>{n}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <button onClick={() => setView('settings')} style={{
+        display:'flex', alignItems:'center', gap:8,
+        padding: collapsed ? '8px' : '6px 10px',
+        justifyContent: collapsed ? 'center' : 'flex-start',
+        borderRadius:8, color:'var(--text-4)', fontSize:12,
+      }}>
+        <Ic.settings size={14}/>
+        {!collapsed && <span>Settings</span>}
+      </button>
+    </aside>
+  );
+}
+
+/* ----------- Command palette ----------- */
+function CommandPalette({ data, onClose, onView, onOpenTask, onOpenProject, onOpenCapture }) {
+  const [q, setQ] = useState('');
+  const ref = useRef(null);
+  useEffect(() => { ref.current?.focus(); }, []);
+
+  const items = useMemo(() => {
+    const base = [
+      { type:'action', id:'capture', label:'Quick capture', icon: Ic.sparkle, hint:'⌘⇧K', onRun: onOpenCapture },
+      { type:'nav', id:'dashboard', label:'Go to Home', icon: Ic.synapse, onRun: () => onView('dashboard') },
+      { type:'nav', id:'today', label:'Go to Today', icon: Ic.today, onRun: () => onView('today') },
+      { type:'nav', id:'tasks', label:'Go to Tasks', icon: Ic.tasks, onRun: () => onView('tasks') },
+      { type:'nav', id:'projects', label:'Go to Projects', icon: Ic.projects, onRun: () => onView('projects') },
+      { type:'nav', id:'calendar', label:'Go to Calendar', icon: Ic.calendar, onRun: () => onView('calendar') },
+      { type:'nav', id:'digest', label:'Go to Briefing', icon: Ic.digest, onRun: () => onView('digest') },
+      ...data.tasks.slice(0,40).map(t => ({ type:'task', id:t.id, label:t.name, icon: Ic.tasks, onRun: () => onOpenTask(t) })),
+      ...data.projects.map(p => ({ type:'project', id:p.id, label:p.name, icon: Ic.projects, onRun: () => onOpenProject(p) })),
+    ];
+    if (!q.trim()) return base.slice(0, 9);
+    const qq = q.toLowerCase();
+    return base.filter(i => i.label.toLowerCase().includes(qq)).slice(0, 12);
+  }, [q, data]);
+
+  const [active, setActive] = useState(0);
+  useEffect(() => { setActive(0); }, [q]);
+
+  const handleKey = (e) => {
+    if (e.key === 'Escape') onClose();
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActive(a => Math.min(a+1, items.length-1)); }
+    if (e.key === 'ArrowUp') { e.preventDefault(); setActive(a => Math.max(a-1, 0)); }
+    if (e.key === 'Enter') { e.preventDefault(); items[active]?.onRun(); onClose(); }
+  };
+
+  return (
+    <div onClick={onClose} style={{position:'fixed', inset:0, background:'color-mix(in oklch, var(--bg-deep) 70%, transparent)', backdropFilter:'blur(8px)', zIndex:4500, display:'flex', alignItems:'flex-start', justifyContent:'center', paddingTop:'14vh'}}>
+      <div onClick={e => e.stopPropagation()} className="fade-in" style={{
+        width:'min(580px, 92vw)',
+        background:'var(--surface)', border:'1px solid var(--line-strong)',
+        borderRadius:14, overflow:'hidden', boxShadow:'0 24px 60px rgba(0,0,0,.4)',
+      }}>
+        <div style={{display:'flex', alignItems:'center', gap:10, padding:'14px 18px', borderBottom:'1px solid var(--line)'}}>
+          <Ic.search/>
+          <input ref={ref} value={q} onChange={e => setQ(e.target.value)} onKeyDown={handleKey}
+            placeholder="Search tasks, projects, or type a command…"
+            style={{flex:1, fontSize:15, background:'transparent'}}/>
+          <Kbd>esc</Kbd>
+        </div>
+        <div style={{maxHeight:'50vh', overflowY:'auto', padding:6}}>
+          {items.length === 0 && <div style={{padding:24, textAlign:'center', color:'var(--text-4)', fontSize:13}}>Nothing matches.</div>}
+          {items.map((it, i) => {
+            const Icon = it.icon;
+            return (
+              <button key={it.type + ':' + it.id} onClick={() => { it.onRun(); onClose(); }}
+                onMouseEnter={() => setActive(i)}
+                style={{
+                  display:'flex', alignItems:'center', gap:12, width:'100%',
+                  padding:'9px 12px', borderRadius:8,
+                  background: active === i ? 'var(--surface-2)' : 'transparent',
+                  color: 'var(--text)', fontSize:13.5, textAlign:'left',
+                }}>
+                <Icon size={14}/>
+                <span style={{flex:1}}>{it.label}</span>
+                <Chip style={{fontSize:10.5}}>{it.type}</Chip>
+                {it.hint && <Kbd>{it.hint}</Kbd>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ----------- Tweaks panel ----------- */
+function TweaksPanel({ settings, onChange, onClose }) {
+  const Row = ({ label, children }) => (
+    <div style={{marginBottom:14}}>
+      <div style={{fontSize:11, color:'var(--text-3)', textTransform:'uppercase', letterSpacing:'.08em', marginBottom:6}}>{label}</div>
+      {children}
+    </div>
+  );
+
+  return (
+    <div className="fade-in" style={{
+      position:'fixed', right:20, bottom:20, zIndex:800,
+      width:320, background:'var(--surface)',
+      border:'1px solid var(--line-strong)', borderRadius:14,
+      boxShadow:'0 20px 40px rgba(0,0,0,.3)',
+      padding:18,
+    }}>
+      <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:16}}>
+        <Ic.sparkle size={14}/>
+        <span className="display" style={{fontSize:14, fontWeight:600}}>Tweaks</span>
+        <button onClick={onClose} style={{marginLeft:'auto', color:'var(--text-4)'}}><Ic.close/></button>
+      </div>
+
+      <Row label="Direction">
+        <Toggle value={settings.direction} onChange={v => onChange('direction', v)} options={[
+          {value:'neural', label:'Neural'},
+          {value:'paper', label:'Paper'},
+          {value:'atlas', label:'Atlas'},
+        ]}/>
+      </Row>
+
+      <Row label="Mode">
+        <Toggle value={settings.mode} onChange={v => onChange('mode', v)} options={[
+          {value:'dark', label:'Dark'},
+          {value:'light', label:'Light'},
+        ]}/>
+      </Row>
+
+      <Row label="Accent">
+        <div style={{display:'flex', gap:8}}>
+          {[
+            {id:'amber', c:'oklch(0.72 0.14 62)'},
+            {id:'violet', c:'oklch(0.68 0.14 305)'},
+            {id:'mint', c:'oklch(0.72 0.12 165)'},
+            {id:'sky', c:'oklch(0.70 0.14 235)'},
+            {id:'rose', c:'oklch(0.70 0.16 15)'},
+          ].map(x => (
+            <button key={x.id} onClick={() => onChange('accent', x.id)} style={{
+              width:28, height:28, borderRadius:'50%',
+              background: x.c,
+              border: settings.accent === x.id ? '2px solid var(--text)' : '2px solid transparent',
+              outline: settings.accent === x.id ? '1px solid var(--line)' : 'none',
+              outlineOffset: 2,
+            }}/>
+          ))}
+        </div>
+      </Row>
+
+      <Row label="Typography">
+        <Toggle value={settings.font} onChange={v => onChange('font', v)} options={[
+          {value:'grotesk', label:'Grotesk'},
+          {value:'editorial', label:'Editorial'},
+        ]}/>
+      </Row>
+
+      <Row label="Density">
+        <Toggle value={settings.density} onChange={v => onChange('density', v)} options={[
+          {value:'dense', label:'Dense'},
+          {value:'comfortable', label:'Comfortable'},
+          {value:'spacious', label:'Spacious'},
+        ]}/>
+      </Row>
+
+      <Row label="Cortex layout">
+        <Toggle value={settings.dashboard_layout} onChange={v => onChange('dashboard_layout', v)} options={[
+          {value:'default', label:'Default'},
+          {value:'cortex', label:'Map-first'},
+          {value:'linear', label:'Linear'},
+        ]}/>
+      </Row>
+    </div>
+  );
+}
+
+/* ----------- Toast ----------- */
+function Toast({ toast, onDismiss }) {
+  useEffect(() => { const t = setTimeout(onDismiss, 3500); return () => clearTimeout(t); }, [toast]);
+  if (!toast) return null;
+  return (
+    <div className="fade-in" style={{
+      position:'fixed', bottom:20, left:'50%', transform:'translateX(-50%)', zIndex:6000,
+      background:'var(--text)', color:'var(--bg)',
+      padding:'10px 18px', borderRadius:999, fontSize:13, fontWeight:500,
+      boxShadow:'0 10px 30px rgba(0,0,0,.3)',
+      display:'flex', alignItems:'center', gap:8,
+    }}>
+      {toast.type === 'success' && <Ic.check size={14}/>}
+      {toast.type === 'ai' && <Ic.sparkle size={14}/>}
+      {toast.msg}
+    </div>
+  );
+}
+
+/* ================= APP ================= */
+function App() {
+  // settings sync with <html> data-attrs + Tweaks panel
+  const [settings, setSettings] = useState(() => {
+    try {
+      const saved = localStorage.getItem('synapse-settings');
+      if (saved) return { ...window.TWEAK_DEFAULTS, ...JSON.parse(saved) };
+    } catch (e) {}
+    return window.TWEAK_DEFAULTS;
+  });
+
+  useEffect(() => {
+    const html = document.documentElement;
+    html.setAttribute('data-direction', settings.direction);
+    html.setAttribute('data-mode', settings.mode);
+    html.setAttribute('data-accent', settings.accent);
+    html.setAttribute('data-font', settings.font);
+    html.setAttribute('data-density', settings.density);
+    localStorage.setItem('synapse-settings', JSON.stringify(settings));
+  }, [settings]);
+
+  const setSetting = (k, v) => setSettings(s => ({ ...s, [k]: v }));
+
+  // app data
+  const [data, setData] = useState(SY.seed);
+  const [view, setView] = useState(() => localStorage.getItem('synapse-view') || 'dashboard');
+  const [panel, setPanel] = useState(null);
+  const [showCapture, setShowCapture] = useState(false);
+  const [showPalette, setShowPalette] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [tweakMode, setTweakMode] = useState(false);
+
+  useEffect(() => { localStorage.setItem('synapse-view', view); }, [view]);
+
+  // Tweak-mode bridge
+  useEffect(() => {
+    const onMsg = (e) => {
+      if (!e.data) return;
+      if (e.data.type === '__activate_edit_mode') setTweakMode(true);
+      if (e.data.type === '__deactivate_edit_mode') setTweakMode(false);
+    };
+    window.addEventListener('message', onMsg);
+    // announce
+    try { window.parent.postMessage({ type: '__edit_mode_available' }, '*'); } catch (e) {}
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
+
+  const changeSetting = (k, v) => {
+    setSetting(k, v);
+    try { window.parent.postMessage({ type: '__edit_mode_set_keys', edits: { [k]: v } }, '*'); } catch (e) {}
+  };
+
+  // Keyboard
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'k') { e.preventDefault(); setShowCapture(true); return; }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setShowPalette(true); return; }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // actions
+  const saveTask = (t) => setData(d => ({ ...d, tasks: d.tasks.map(x => x.id === t.id ? t : x) }));
+  const deleteTask = (id) => setData(d => ({ ...d, tasks: d.tasks.filter(x => x.id !== id) }));
+  const saveProject = (p) => setData(d => ({ ...d, projects: d.projects.map(x => x.id === p.id ? p : x) }));
+  const deleteProject = (id) => setData(d => ({ ...d, projects: d.projects.filter(x => x.id !== id), tasks: d.tasks.map(t => t.projectId === id ? {...t, projectId: null} : t) }));
+
+  const actions = {
+    setView,
+    openCapture: () => setShowCapture(true),
+    openTask: (t) => setPanel({ type:'task', item:t }),
+    openProject: (p) => setPanel({ type:'project', item:p }),
+    newTask: () => {
+      const n = { id: 'nt_' + Date.now(), name:'New task', areaId: data.areas[0].id, projectId: null, status:'Not Started', priority:'Medium', effort:'M', due: null, touchedAt: new Date().toISOString(), createdAt: new Date().toISOString(), notes:'' };
+      setData(d => ({ ...d, tasks: [n, ...d.tasks] }));
+      setPanel({ type:'task', item:n });
+    },
+    newProject: () => {
+      const n = { id: 'np_' + Date.now(), name:'New project', areaId: data.areas[0].id, status:'Not Started', priority:'Medium', due: null, touchedAt: new Date().toISOString(), createdAt: new Date().toISOString(), notes:'' };
+      setData(d => ({ ...d, projects: [n, ...d.projects] }));
+      setPanel({ type:'project', item:n });
+    },
+    toggleComplete: (t) => saveTask({ ...t, status: t.status === 'Complete' ? 'Not Started' : 'Complete', touchedAt: new Date().toISOString() }),
+    touch: (t) => {
+      saveTask({ ...t, touchedAt: new Date().toISOString(), due: H.todayStr() });
+      setToast({ msg:`Pulled "${t.name}" into today`, type:'success' });
+    },
+    moveTask: (id, status) => {
+      const t = data.tasks.find(x => x.id === id);
+      if (t) saveTask({ ...t, status, touchedAt: new Date().toISOString() });
+    },
+    acceptProposal: (p) => {
+      const np = { id: 'np_' + Date.now(), name: p.suggestedName, areaId: p.areaId, status:'Not Started', priority:'Medium', due: null, touchedAt: new Date().toISOString(), createdAt: new Date().toISOString(), notes: p.themeSummary || '' };
+      setData(d => ({ ...d, projects: [np, ...d.projects], proposals: d.proposals.map(x => x.id === p.id ? { ...x, status:'accepted' } : x) }));
+      setToast({ msg:`Project "${np.name}" created`, type:'ai' });
+    },
+    dismissProposal: (p) => setData(d => ({ ...d, proposals: d.proposals.map(x => x.id === p.id ? { ...x, status:'dismissed' } : x) })),
+    commitCapture: ({ rawText, extracted }) => {
+      const noteId = 'nn_' + Date.now();
+      const newTasks = extracted.map((it, i) => ({
+        id: 'tc_' + Date.now() + '_' + i,
+        name: it.name, projectId: null, areaId: it.areaId,
+        status:'Not Started', priority: it.priority, effort: it.effort,
+        due: it.due, recurrence: null, notes:'',
+        sourceNoteId: noteId,
+        createdAt: new Date().toISOString(),
+        touchedAt: new Date().toISOString(),
+        aiConfidence: it.confidence, aiProposed: true,
+      }));
+      const note = { id: noteId, rawText, createdAt: new Date().toISOString(), extractedIds: newTasks.map(t => t.id), areaIds: [...new Set(newTasks.map(t => t.areaId))], source:'capture' };
+      setData(d => ({ ...d, notes: [note, ...d.notes], tasks: [...newTasks, ...d.tasks] }));
+      setShowCapture(false);
+      setToast({ msg:`Saved ${newTasks.length} item${newTasks.length===1?'':'s'}`, type:'ai' });
+    },
+  };
+
+  // counts
+  const today = H.todayStr();
+  const counts = {
+    today: data.tasks.filter(t => t.due === today && t.status !== 'Complete').length,
+    tasksActive: data.tasks.filter(t => t.status !== 'Complete').length,
+    projects: data.projects.filter(p => p.status !== 'Complete').length,
+    notes: data.notes.length,
+    proposals: data.proposals.filter(p => p.status === 'pending').length,
+  };
+
+  // keep panel item in sync if data changed
+  useEffect(() => {
+    if (!panel) return;
+    const src = panel.type === 'task' ? data.tasks : data.projects;
+    const updated = src.find(x => x.id === panel.item.id);
+    if (updated && updated !== panel.item) setPanel(p => ({ ...p, item: updated }));
+  }, [data.tasks, data.projects]);
+
+  const renderView = () => {
+    switch (view) {
+      case 'dashboard': return <Dashboard.View data={data} actions={actions} layout={settings.dashboard_layout}/>;
+      case 'today':     return <Views.Today data={data} actions={actions}/>;
+      case 'tasks':     return <Views.Tasks data={data} actions={actions}/>;
+      case 'projects':  return <Views.Projects data={data} actions={actions}/>;
+      case 'board':     return <Views.Board data={data} actions={actions}/>;
+      case 'calendar':  return <Views.Calendar data={data} actions={actions}/>;
+      case 'stream':    return <Views.Stream data={data} actions={actions}/>;
+      case 'notes':     return <Views.Notes data={data} actions={actions}/>;
+      case 'digest':    return <Views.Digest data={data} actions={actions}/>;
+      case 'inbox':     return <Views.Inbox data={data} actions={actions}/>;
+      case 'settings':  return <Views.Settings data={data} actions={actions} state={settings}/>;
+      default: return <Dashboard.View data={data} actions={actions} layout={settings.dashboard_layout}/>;
+    }
+  };
+
+  return (
+    <div style={{display:'flex', height:'100vh', overflow:'hidden', background:'var(--bg)'}}>
+      <Sidebar
+        view={view} setView={setView}
+        data={data} counts={counts}
+        onOpenCapture={() => setShowCapture(true)}
+        onOpenPalette={() => setShowPalette(true)}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed(c => !c)}
+      />
+
+      <main style={{flex:1, overflowY:'auto', padding:'28px 40px 80px'}}>
+        <div style={{maxWidth:1200, margin:'0 auto'}}>
+          {renderView()}
+        </div>
+      </main>
+
+      {showCapture && <Views.CaptureModal data={data} onCommit={actions.commitCapture} onClose={() => setShowCapture(false)}/>}
+      {showPalette && <CommandPalette data={data} onClose={() => setShowPalette(false)} onView={setView} onOpenTask={actions.openTask} onOpenProject={actions.openProject} onOpenCapture={() => setShowCapture(true)}/>}
+      {panel && <Views.DetailPanel type={panel.type} item={panel.item} data={data}
+        onClose={() => setPanel(null)}
+        onSave={panel.type === 'task' ? saveTask : saveProject}
+        onDelete={panel.type === 'task' ? deleteTask : deleteProject}/>}
+      {tweakMode && <TweaksPanel settings={settings} onChange={changeSetting} onClose={() => setTweakMode(false)}/>}
+      <Toast toast={toast} onDismiss={() => setToast(null)}/>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
 </body>
 </html>
