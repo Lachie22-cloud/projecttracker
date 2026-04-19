@@ -19,7 +19,7 @@ window.Views = (function () {
 
     const simulateAI = (raw) => {
       // Fake AI extraction — split by lines/sentences and create tasks
-      const lines = raw.split(/\n|(?<=\.\s)|(?<=\?)\s|(?<=\!)\s/).map(s => s.trim()).filter(s => s.length > 5);
+      const lines = raw.split(/\n|[.?!]\s+/).map(s => s.trim()).filter(s => s.length > 5);
       const now = Date.now();
       return lines.slice(0,8).map((l, i) => {
         const hasDate = /today|tomorrow|monday|tuesday|wednesday|thursday|friday|weekend|friday|tonight|next week/i.test(l);
