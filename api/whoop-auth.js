@@ -11,13 +11,18 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  // Generate a random state value and store it in a short-lived cookie
+  const state = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+
   const params = new URLSearchParams({
     response_type: "code",
     client_id: CLIENT_ID,
     redirect_uri: REDIRECT_URI,
     scope: SCOPES,
+    state,
   });
 
+  res.setHeader("Set-Cookie", `whoop_state=${state}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600`);
   const authorizeUrl = `${AUTH_URL}?${params.toString()}`;
   return res.redirect(302, authorizeUrl);
 }

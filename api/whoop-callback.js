@@ -13,7 +13,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { code, error: oauthError } = req.query;
+  const { code, error: oauthError, state } = req.query;
 
   if (oauthError) {
     return res.redirect(302, `${FRONTEND_URL}?whoop_error=${encodeURIComponent(oauthError)}`);
@@ -21,6 +21,14 @@ export default async function handler(req, res) {
 
   if (!code) {
     return res.status(400).json({ error: "Missing authorization code" });
+  }
+
+  // Validate state against cookie
+  const cookies = Object.fromEntries(
+    (req.headers.cookie || "").split(";").map(c => c.trim().split("=").map(decodeURIComponent))
+  );
+  if (state && cookies.whoop_state && state !== cookies.whoop_state) {
+    return res.redirect(302, `${FRONTEND_URL}?whoop_error=state_mismatch`);
   }
 
   try {
