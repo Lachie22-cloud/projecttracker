@@ -841,19 +841,133 @@ window.Views = (function () {
   }
 
   /* ---------------- SETTINGS ---------------- */
+  const HUE_PRESETS = [0, 25, 62, 100, 140, 165, 200, 235, 265, 305, 340];
+
+  function AreaRow({ area, taskCount, projectCount, onSave, onDelete }) {
+    const [editing, setEditing] = useState(false);
+    const [name, setName] = useState(area.name);
+    const [hue, setHue] = useState(area.hue);
+
+    const commit = () => {
+      onSave({ ...area, name: name.trim() || area.name, hue });
+      setEditing(false);
+    };
+
+    if (!editing) {
+      return (
+        <div style={{display:'flex', alignItems:'center', gap:10, padding:'9px 0', borderBottom:'1px solid var(--line)'}}>
+          <div style={{width:14, height:14, borderRadius:'50%', background:`oklch(0.72 0.12 ${area.hue})`, flexShrink:0}}/>
+          <span style={{flex:1, fontSize:14}}>{area.name}</span>
+          <span className="mono" style={{fontSize:11, color:'var(--text-4)'}}>{taskCount} open · {projectCount} proj</span>
+          <button onClick={() => setEditing(true)} style={{padding:'4px 10px', fontSize:12, borderRadius:6, border:'1px solid var(--line)', color:'var(--text-3)', background:'transparent'}}>Edit</button>
+          <button onClick={() => { if (window.confirm(`Delete "${area.name}"? Tasks in this area won't be deleted.`)) onDelete(area.id); }} style={{padding:'4px 8px', fontSize:12, borderRadius:6, border:'1px solid var(--line)', color:'var(--neg)', background:'transparent'}}>✕</button>
+        </div>
+      );
+    }
+
+    return (
+      <div style={{padding:'12px 0', borderBottom:'1px solid var(--line)'}}>
+        <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:10}}>
+          <div style={{width:14, height:14, borderRadius:'50%', background:`oklch(0.72 0.12 ${hue})`, flexShrink:0}}/>
+          <input
+            value={name}
+            onChange={e => setName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false); }}
+            autoFocus
+            style={{flex:1, fontSize:14, padding:'6px 10px', background:'var(--surface-2)', border:'1px solid var(--focus)', borderRadius:7, color:'var(--text)'}}
+          />
+          <button onClick={commit} style={{padding:'5px 12px', fontSize:12, borderRadius:6, background:'var(--focus)', color:'oklch(0.15 0.01 60)', fontWeight:600, border:'none'}}>Save</button>
+          <button onClick={() => { setName(area.name); setHue(area.hue); setEditing(false); }} style={{padding:'5px 8px', fontSize:12, borderRadius:6, border:'1px solid var(--line)', color:'var(--text-3)', background:'transparent'}}>Cancel</button>
+        </div>
+        <div style={{display:'flex', gap:6, flexWrap:'wrap', paddingLeft:22}}>
+          {HUE_PRESETS.map(h => (
+            <button key={h} onClick={() => setHue(h)} style={{
+              width:22, height:22, borderRadius:'50%',
+              background:`oklch(0.72 0.12 ${h})`,
+              border: hue === h ? '2px solid var(--text)' : '2px solid transparent',
+              outline: hue === h ? '1px solid var(--line-strong)' : 'none',
+              outlineOffset: 2,
+            }}/>
+          ))}
+          <div style={{display:'flex', alignItems:'center', gap:6, marginLeft:4}}>
+            <span style={{fontSize:11, color:'var(--text-4)'}}>or hue</span>
+            <input type="range" min={0} max={360} value={hue} onChange={e => setHue(Number(e.target.value))} style={{width:80}}/>
+            <span className="mono" style={{fontSize:11, color:'var(--text-3)', width:26}}>{hue}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   function Settings({ data, actions, state }) {
+    const [addingArea, setAddingArea] = useState(false);
+    const [newName, setNewName] = useState('');
+    const [newHue, setNewHue] = useState(200);
+
+    const addArea = () => {
+      if (!newName.trim()) return;
+      actions.addArea({ id: 'a_' + Date.now(), name: newName.trim(), hue: newHue, icon: '●' });
+      setNewName('');
+      setNewHue(200);
+      setAddingArea(false);
+    };
+
     return (
       <div style={{maxWidth:640}}>
         <PageHeader title="Settings"/>
 
         <Card style={{padding:22, marginBottom:14}}>
-          <div style={{fontSize:15, fontWeight:600, marginBottom:12}}>Areas</div>
-          {data.areas.map(a => (
-            <div key={a.id} style={{display:'flex', alignItems:'center', gap:10, padding:'8px 0'}}>
-              <AreaSwatch area={a} size={14}/>
-              <span style={{flex:1, fontSize:14}}>{a.name}</span>
-              <span className="mono" style={{fontSize:11, color:'var(--text-4)'}}>{data.tasks.filter(t => t.areaId === a.id && t.status !== 'Complete').length} open · {data.projects.filter(p => p.areaId === a.id).length} projects</span>
+          <div style={{display:'flex', alignItems:'center', marginBottom:14}}>
+            <span style={{fontSize:15, fontWeight:600, flex:1}}>Areas of mind</span>
+            <button onClick={() => setAddingArea(a => !a)} style={{
+              padding:'5px 12px', fontSize:12, borderRadius:6,
+              background: addingArea ? 'var(--surface-2)' : 'var(--focus)',
+              color: addingArea ? 'var(--text-3)' : 'oklch(0.15 0.01 60)',
+              border: addingArea ? '1px solid var(--line)' : 'none', fontWeight:600,
+            }}>{addingArea ? 'Cancel' : '+ Add area'}</button>
+          </div>
+
+          {addingArea && (
+            <div style={{padding:'12px 0', marginBottom:8, borderBottom:'1px solid var(--line)'}}>
+              <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:10}}>
+                <div style={{width:14, height:14, borderRadius:'50%', background:`oklch(0.72 0.12 ${newHue})`, flexShrink:0}}/>
+                <input
+                  value={newName}
+                  onChange={e => setNewName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') addArea(); if (e.key === 'Escape') setAddingArea(false); }}
+                  autoFocus
+                  placeholder="Area name…"
+                  style={{flex:1, fontSize:14, padding:'6px 10px', background:'var(--surface-2)', border:'1px solid var(--focus)', borderRadius:7, color:'var(--text)'}}
+                />
+                <button onClick={addArea} style={{padding:'5px 12px', fontSize:12, borderRadius:6, background:'var(--focus)', color:'oklch(0.15 0.01 60)', fontWeight:600, border:'none'}}>Add</button>
+              </div>
+              <div style={{display:'flex', gap:6, flexWrap:'wrap', paddingLeft:22}}>
+                {HUE_PRESETS.map(h => (
+                  <button key={h} onClick={() => setNewHue(h)} style={{
+                    width:22, height:22, borderRadius:'50%',
+                    background:`oklch(0.72 0.12 ${h})`,
+                    border: newHue === h ? '2px solid var(--text)' : '2px solid transparent',
+                    outline: newHue === h ? '1px solid var(--line-strong)' : 'none',
+                    outlineOffset: 2,
+                  }}/>
+                ))}
+                <div style={{display:'flex', alignItems:'center', gap:6, marginLeft:4}}>
+                  <input type="range" min={0} max={360} value={newHue} onChange={e => setNewHue(Number(e.target.value))} style={{width:80}}/>
+                  <span className="mono" style={{fontSize:11, color:'var(--text-3)', width:26}}>{newHue}</span>
+                </div>
+              </div>
             </div>
+          )}
+
+          {data.areas.map(a => (
+            <AreaRow
+              key={a.id}
+              area={a}
+              taskCount={data.tasks.filter(t => t.areaId === a.id && t.status !== 'Complete').length}
+              projectCount={data.projects.filter(p => p.areaId === a.id).length}
+              onSave={actions.saveArea}
+              onDelete={actions.deleteArea}
+            />
           ))}
         </Card>
 
@@ -867,18 +981,15 @@ window.Views = (function () {
           </div>
         </Card>
 
-        <Card style={{padding:22, marginBottom:14}}>
-          <div style={{fontSize:15, fontWeight:600, marginBottom:6}}>Daily briefing</div>
-          <div style={{fontSize:13, color:'var(--text-3)', marginBottom:14}}>Cortex auto-generates a morning digest at this time</div>
-          <input type="time" defaultValue="07:30" style={{...inputStyle, width:120}}/>
-        </Card>
-
         <Card style={{padding:22}}>
           <div style={{fontSize:15, fontWeight:600, marginBottom:14}}>Data</div>
           <div style={{display:'flex', gap:8}}>
-            <Button variant="secondary" size="sm">Export JSON</Button>
-            <Button variant="secondary" size="sm">Import</Button>
-            <Button variant="danger" size="sm">Wipe all data</Button>
+            <Button variant="secondary" size="sm" onClick={() => {
+              const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+              const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+              a.download = 'cortex-export.json'; a.click();
+            }}>Export JSON</Button>
+            <Button variant="danger" size="sm" onClick={() => { if (window.confirm('Wipe all data?')) { localStorage.removeItem('cortex-v1-data'); location.reload(); } }}>Wipe all data</Button>
           </div>
         </Card>
       </div>

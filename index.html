@@ -420,12 +420,16 @@ function App() {
   const deleteTask = (id) => setData(d => ({ ...d, tasks: d.tasks.filter(x => x.id !== id) }));
   const saveProject = (p) => setData(d => ({ ...d, projects: d.projects.map(x => x.id === p.id ? p : x) }));
   const deleteProject = (id) => setData(d => ({ ...d, projects: d.projects.filter(x => x.id !== id), tasks: d.tasks.map(t => t.projectId === id ? {...t, projectId: null} : t) }));
+  const saveArea = (a) => setData(d => ({ ...d, areas: d.areas.map(x => x.id === a.id ? a : x) }));
+  const deleteArea = (id) => setData(d => ({ ...d, areas: d.areas.filter(x => x.id !== id) }));
+  const addArea = (a) => setData(d => ({ ...d, areas: [...d.areas, a] }));
 
   const actions = {
     setView,
     openCapture: () => setShowCapture(true),
     openTask: (t) => setPanel({ type:'task', item:t }),
     openProject: (p) => setPanel({ type:'project', item:p }),
+    saveArea, deleteArea, addArea,
     newTask: () => {
       const n = { id: 'nt_' + Date.now(), name:'New task', areaId: data.areas[0].id, projectId: null, status:'Not Started', priority:'Medium', effort:'M', due: null, touchedAt: new Date().toISOString(), createdAt: new Date().toISOString(), notes:'' };
       setData(d => ({ ...d, tasks: [n, ...d.tasks] }));
