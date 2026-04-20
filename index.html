@@ -433,7 +433,7 @@ function App() {
 
   // Auto-refresh Whoop data on load if tokens exist
   useEffect(() => {
-    if (whoopTokens && !whoopData) fetchWhoopData(whoopTokens);
+    if (whoopTokens) fetchWhoopData(whoopTokens);
   }, []);
 
   // app data

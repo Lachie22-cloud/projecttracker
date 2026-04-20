@@ -1094,12 +1094,18 @@ window.Views = (function () {
 
         {/* Strain row */}
         <div style={{ fontSize: 12, color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 10 }}>Strain</div>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
           <StatCard label="Day Strain" value={c?.strain ? c.strain.toFixed(1) : '—'} color={strainColor(c?.strain)} sub="/ 21.0 max" />
           <StatCard label="Avg HR" value={c?.average_heart_rate ? `${c.average_heart_rate}bpm` : '—'} />
           <StatCard label="Max HR" value={c?.max_heart_rate ? `${c.max_heart_rate}bpm` : '—'} />
           <StatCard label="Calories" value={c?.kilojoule ? `${Math.round(c.kilojoule / 4.184)} kcal` : '—'} />
         </div>
+
+        {/* Raw debug — remove once data is confirmed working */}
+        <details style={{ marginTop: 8 }}>
+          <summary style={{ fontSize: 11, color: 'var(--text-4)', cursor: 'pointer', userSelect: 'none' }}>Raw API response (debug)</summary>
+          <pre style={{ fontSize: 10, color: 'var(--text-3)', background: 'var(--bg-deep)', padding: 12, borderRadius: 8, overflowX: 'auto', marginTop: 8 }}>{JSON.stringify(whoopData, null, 2)}</pre>
+        </details>
       </div>
     );
   }
