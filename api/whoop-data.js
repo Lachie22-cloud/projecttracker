@@ -135,6 +135,7 @@ export default async function handler(req, res) {
         cycle_id: recoveryRecord.cycle_id ?? null,
         created_at: recoveryRecord.created_at ?? null,
         updated_at: recoveryRecord.updated_at ?? null,
+        score_state: recoveryRecord.score_state ?? null,
       }
     : null;
 
@@ -155,6 +156,7 @@ export default async function handler(req, res) {
         start: sleepRecord.start ?? null,
         end: sleepRecord.end ?? null,
         created_at: sleepRecord.created_at ?? null,
+        score_state: sleepRecord.score_state ?? null,
       }
     : null;
 

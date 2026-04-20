@@ -1067,15 +1067,22 @@ window.Views = (function () {
 
         {/* Recovery row */}
         <div style={{ fontSize: 12, color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 10 }}>Recovery</div>
+        {r?.score_state === 'PENDING_SLEEP' || (r && !r.score && r.score_state !== 'SCORED') ? (
+          <div style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 24, padding: '12px 0' }}>Recovery score pending — Whoop scores recovery after sleep is processed. Check back later.</div>
+        ) : (
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
           <StatCard label="Recovery Score" value={r?.score ? `${r.score}%` : '—'} color={recoveryColor(r?.score)} sub={r?.score >= 67 ? 'Green — good to go' : r?.score >= 34 ? 'Yellow — moderate' : r?.score ? 'Red — take it easy' : null} />
           <StatCard label="HRV" value={r?.hrv_rmssd_milli ? `${Math.round(r.hrv_rmssd_milli)}ms` : '—'} sub="rMSSD" />
           <StatCard label="Resting HR" value={r?.resting_heart_rate ? `${r.resting_heart_rate}bpm` : '—'} />
           <StatCard label="SpO₂" value={r?.spo2_percentage ? `${r.spo2_percentage.toFixed(1)}%` : '—'} />
         </div>
+        )}
 
         {/* Sleep row */}
         <div style={{ fontSize: 12, color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 10 }}>Sleep</div>
+        {s?.score_state && s.score_state !== 'SCORED' ? (
+          <div style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 24, padding: '12px 0' }}>Sleep score {s.score_state === 'PENDING_SLEEP' ? 'pending' : 'processing'} — Whoop takes ~30 min after waking to score your sleep. Try refreshing soon.</div>
+        ) : (
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
           <StatCard label="Sleep Performance" value={s?.sleep_performance_percentage ? `${Math.round(s.sleep_performance_percentage)}%` : '—'} />
           <StatCard label="Total Sleep" value={fmt(s?.total_in_bed_time_milli ? s.total_in_bed_time_milli - (s.total_awake_time_milli || 0) : null)} />
@@ -1083,6 +1090,7 @@ window.Views = (function () {
           <StatCard label="Deep (SWS)" value={fmt(s?.total_slow_wave_sleep_time_milli)} />
           <StatCard label="Bedtime" value={fmtTime(s?.start)} sub={`up ${fmtTime(s?.end)}`} />
         </div>
+        )}
 
         {/* Strain row */}
         <div style={{ fontSize: 12, color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 10 }}>Strain</div>
